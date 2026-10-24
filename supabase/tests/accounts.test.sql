@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(59);
+select plan(71);
 
 -- Runs a statement and returns the number of affected rows (as the current role).
 create function pg_temp.affected(sql text) returns integer
@@ -21,6 +21,8 @@ select has_table('public', 'user_data', 'user_data exists');
 select has_table('public', 'auth_attempts', 'auth_attempts exists');
 select col_is_pk('public', 'profiles', 'username', 'profiles.username is the primary key');
 select col_is_pk('public', 'user_data', array['user_id', 'key'], 'user_data primary key is (user_id, key)');
+select has_sequence('public', 'user_data_version_seq', 'user_data_version_seq exists');
+select col_type_is('public', 'user_data', 'version', 'bigint', 'user_data.version is bigint');
 
 -- ---------------------------------------------------------------- sign-up trigger
 select lives_ok(
@@ -38,10 +40,10 @@ select results_eq(
 );
 
 select results_eq(
-  $$select value, version from public.user_data
+  $$select value, version is not null from public.user_data
     where user_id = '11111111-1111-1111-1111-111111111111' and key = 'w150.prefs'$$,
-  $$values ('{"age": 34}'::jsonb, 1)$$,
-  'trigger creates w150.prefs {"age": 34} at version 1'
+  $$values ('{"age": 34}'::jsonb, true)$$,
+  'trigger creates w150.prefs {"age": 34} with a version'
 );
 
 select throws_ok(
@@ -172,10 +174,14 @@ select is(has_function_privilege('anon', 'public.handle_new_user()', 'execute'),
   'anon cannot execute handle_new_user');
 select is(has_function_privilege('authenticated', 'public.handle_new_user()', 'execute'), false,
   'authenticated cannot execute handle_new_user');
-select is(has_function_privilege('anon', 'public.put_user_data(text, jsonb, integer)', 'execute'), false,
+select is(has_function_privilege('anon', 'public.put_user_data(text, jsonb, bigint)', 'execute'), false,
   'anon cannot execute put_user_data');
-select is(has_function_privilege('authenticated', 'public.put_user_data(text, jsonb, integer)', 'execute'), true,
+select is(has_function_privilege('authenticated', 'public.put_user_data(text, jsonb, bigint)', 'execute'), true,
   'authenticated can execute put_user_data');
+select is(has_sequence_privilege('anon', 'public.user_data_version_seq', 'usage'), false,
+  'anon cannot use user_data_version_seq');
+select is(has_sequence_privilege('authenticated', 'public.user_data_version_seq', 'usage'), true,
+  'authenticated can use user_data_version_seq (put_user_data runs as the caller)');
 
 -- ---------------------------------------------------------------- username_available
 select is(public.username_available('BUDI_1'), false, 'BUDI_1 is taken (case insensitive)');
@@ -192,34 +198,90 @@ reset role;
 set local role authenticated;
 set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
 
+-- Versions come from one global sequence, so tests compare them relationally. Captured
+-- versions are kept in transaction-local settings (t.*) and read back with current_setting.
 select results_eq(
-  $$select ok, version from public.put_user_data('w150.sessions', '[]', null)$$,
-  $$values (true, 1)$$,
-  'insert with null expected version gives version 1'
+  $$select ok, version is not null from public.put_user_data('w150.sessions', '[]', null)$$,
+  $$values (true, true)$$,
+  'insert with null expected version succeeds with a version'
+);
+
+select isnt(
+  set_config('t.v1', (select version::text from public.user_data where key = 'w150.sessions'), true),
+  null,
+  'captures the inserted sessions version'
 );
 
 select results_eq(
   $$select ok, version from public.put_user_data('w150.sessions', '[]', null)$$,
-  $$values (false, 1)$$,
+  $$select false, current_setting('t.v1')::bigint$$,
   'second insert with null expected version reports the existing version'
 );
 
 select results_eq(
-  $$select ok, version from public.put_user_data('w150.sessions', '[{"id":"s1"}]', 1)$$,
-  $$values (true, 2)$$,
-  'update with matching version gives version 2'
+  $$select ok, version > current_setting('t.v1')::bigint
+    from public.put_user_data('w150.sessions', '[{"id":"s1"}]', current_setting('t.v1')::bigint)$$,
+  $$values (true, true)$$,
+  'update with matching version gives a new, greater version'
+);
+
+select isnt(
+  set_config('t.v2', (select version::text from public.user_data where key = 'w150.sessions'), true),
+  null,
+  'captures the updated sessions version'
 );
 
 select results_eq(
-  $$select ok, version, value from public.put_user_data('w150.sessions', '[{"id":"s2"}]', 1)$$,
-  $$values (false, 2, '[{"id":"s1"}]'::jsonb)$$,
+  $$select ok, version, value
+    from public.put_user_data('w150.sessions', '[{"id":"s2"}]', current_setting('t.v1')::bigint)$$,
+  $$select false, current_setting('t.v2')::bigint, '[{"id":"s1"}]'::jsonb$$,
   'stale version returns the current server version and value'
 );
 
 select results_eq(
   $$select ok, version, value from public.put_user_data('w150.plan', '{}', 5)$$,
-  $$values (false, null::integer, null::jsonb)$$,
+  $$values (false, null::bigint, null::jsonb)$$,
   'expected version on a missing row returns nulls'
+);
+
+-- Delete then insert again must not reuse a version (ABA): a device still holding the
+-- version from before the delete must get a conflict, not overwrite the new row.
+select results_eq(
+  $$select ok from public.put_user_data('w150.breaks', '{"2026-10-01": 1}', null)$$,
+  $$values (true)$$,
+  'breaks inserted'
+);
+
+select isnt(
+  set_config('t.b1', (select version::text from public.user_data where key = 'w150.breaks'), true),
+  null,
+  'captures the breaks version before the delete'
+);
+
+select is(
+  pg_temp.affected($$delete from public.user_data where key = 'w150.breaks'$$),
+  1,
+  'user A deletes own breaks row'
+);
+
+select results_eq(
+  $$select ok, version <> current_setting('t.b1')::bigint
+    from public.put_user_data('w150.breaks', '{"2026-10-20": 2}', null)$$,
+  $$values (true, true)$$,
+  'insert after the delete gets a version different from the deleted one'
+);
+
+select results_eq(
+  $$select ok, version <> current_setting('t.b1')::bigint, value
+    from public.put_user_data('w150.breaks', '{"2026-10-01": 1, "2026-10-02": 1}', current_setting('t.b1')::bigint)$$,
+  $$values (false, true, '{"2026-10-20": 2}'::jsonb)$$,
+  'a put with the version from before the delete conflicts and returns the new row'
+);
+
+select is(
+  (select value from public.user_data where key = 'w150.breaks'),
+  '{"2026-10-20": 2}'::jsonb,
+  'the re-inserted breaks row is not overwritten by the stale put'
 );
 
 select throws_ok(
@@ -236,8 +298,8 @@ select throws_ok(
 
 -- supabase-js sends a JSON null argument as SQL NULL; it is stored as JSON null.
 select results_eq(
-  $$select ok, version from public.put_user_data('w150.plan', null, null)$$,
-  $$values (true, 1)$$,
+  $$select ok, version is not null from public.put_user_data('w150.plan', null, null)$$,
+  $$values (true, true)$$,
   'SQL NULL value is accepted'
 );
 
@@ -292,8 +354,8 @@ select throws_ok(
 );
 
 select results_eq(
-  $$select ok, version from public.put_user_data('w150.sessions', '["b"]', null)$$,
-  $$values (true, 1)$$,
+  $$select ok, version is not null from public.put_user_data('w150.sessions', '["b"]', null)$$,
+  $$values (true, true)$$,
   'put_user_data as B writes B''s own row'
 );
 
@@ -349,7 +411,7 @@ reset role;
 select results_eq(
   $$select version, value from public.user_data
     where user_id = '11111111-1111-1111-1111-111111111111' and key = 'w150.sessions'$$,
-  $$values (2, '[{"id":"s1"}]'::jsonb)$$,
+  $$select current_setting('t.v2')::bigint, '[{"id":"s1"}]'::jsonb$$,
   'user A sessions are unchanged after user B actions'
 );
 

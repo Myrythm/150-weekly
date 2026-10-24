@@ -41,10 +41,16 @@ function fakeTimers() {
   };
 }
 
-/* in-memory server: one row per key with a version, compare-and-set like put_user_data */
-function fakeBackend(initial) {
+/* in-memory server: one row per key with a version, compare-and-set like put_user_data.
+   By default versions count per row from 1 (easy to read in assertions); with
+   { globalVersions: true } every write takes the next number of one shared sequence, like
+   user_data_version_seq, so a row deleted and inserted again gets a version never used before. */
+function fakeBackend(initial, opts) {
+  const global = !!(opts && opts.globalVersions);
+  let seq = 0;
+  const nextVersion = (cur) => (global ? ++seq : (cur || 0) + 1);
   const rows = new Map();
-  Object.keys(initial || {}).forEach((k) => rows.set(k, { value: clone(initial[k]), version: 1 }));
+  Object.keys(initial || {}).forEach((k) => rows.set(k, { value: clone(initial[k]), version: nextVersion(null) }));
   const failures = [];
   const be = {
     rows,
@@ -55,8 +61,9 @@ function fakeBackend(initial) {
     puts() { return be.calls.filter((c) => c[0] === 'put'); },
     otherClientWrites(key, value) {
       const row = rows.get(key);
-      rows.set(key, { value: clone(value), version: row ? row.version + 1 : 1 });
+      rows.set(key, { value: clone(value), version: nextVersion(row ? row.version : null) });
     },
+    otherClientRemoves(key) { rows.delete(key); },
     async fetchAll() {
       be.calls.push(['fetchAll']);
       return [...rows].map(([key, r]) => ({ key, value: clone(r.value), version: r.version }));
@@ -67,7 +74,7 @@ function fakeBackend(initial) {
       const row = rows.get(key);
       const cur = row ? row.version : null;
       if (cur !== expectedVersion) return { ok: false, version: cur, value: row ? clone(row.value) : null };
-      const version = (cur || 0) + 1;
+      const version = nextVersion(cur);
       rows.set(key, { value: clone(value), version });
       return { ok: true, version, value: clone(value) };
     },
@@ -81,9 +88,9 @@ function fakeBackend(initial) {
   return be;
 }
 
-function setup(initial, extra) {
+function setup(initial, extra, backendOpts) {
   const timers = fakeTimers();
-  const be = fakeBackend(initial);
+  const be = fakeBackend(initial, backendOpts);
   const log = { status: [], remote: [], notice: [] };
   const store = W150Store.create(be, Object.assign({
     onStatus: (s) => log.status.push(s),
@@ -325,6 +332,89 @@ test('non-list key conflict: server wins', async () => {
   store.set('w150.prefs', { age: 41 });
   await timers.advance(500);
   assert.deepStrictEqual(be.rows.get('w150.prefs'), { value: { age: 41 }, version: 3 });
+});
+
+test('server wins notice copy', async () => {
+  const { store, timers, be, log } = setup({ 'w150.prefs': { age: 30 } });
+  await store.hydrate();
+  be.otherClientWrites('w150.prefs', { age: 40 });
+  store.set('w150.prefs', { age: 35 });
+  await timers.advance(500);
+  assert.deepStrictEqual(log.notice, ['Another device saved a newer version, so your last change was replaced.']);
+});
+
+test('non-list key conflict without a local edit: server wins quietly', async () => {
+  const { store, timers, be, log } = setup({ 'w150.prefs': { age: 30 } });
+  await store.hydrate();
+  be.otherClientWrites('w150.prefs', { age: 40 });
+  /* persist() writes every key on each log, so the unchanged value is put again */
+  store.set('w150.prefs', { age: 30 });
+  await timers.advance(500);
+  assert.strictEqual(be.puts().length, 1);
+  assert.deepStrictEqual(be.rows.get('w150.prefs'), { value: { age: 40 }, version: 2 });
+  assert.deepStrictEqual(store.get('w150.prefs', null), { age: 40 });
+  assert.deepStrictEqual(log.notice, []);
+  assert.deepStrictEqual(log.remote, [['w150.prefs']]);
+  assert.strictEqual(store.pending(), false);
+  store.set('w150.prefs', { age: 41 });
+  await timers.advance(500);
+  assert.deepStrictEqual(be.rows.get('w150.prefs'), { value: { age: 41 }, version: 3 });
+});
+
+test('two devices seeding the same sample on a new account end with one copy and no notice', async () => {
+  /* app.js seeds samples with fixed ids and times, so both devices write identical values */
+  const sample = [{ id: 'sample_0', min: 30 }, { id: 'sample_1', min: 20 }];
+  const plan = { will: 'do 10 squats', sample: true, savedAt: 1000 };
+  const timers = fakeTimers();
+  const be = fakeBackend({}, { globalVersions: true });
+  const log = { remote: [], notice: [] };
+  const opts = {
+    onRemoteChange: (keys) => log.remote.push(keys),
+    onNotice: (t) => log.notice.push(t),
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout
+  };
+  const one = W150Store.create(be, opts), two = W150Store.create(be, opts);
+  await one.hydrate();
+  await two.hydrate();
+  [one, two].forEach((s) => { s.set('w150.sessions', sample); s.set('w150.plan', plan); });
+  await timers.advance(500);
+  assert.deepStrictEqual(be.rows.get('w150.sessions').value, sample);
+  assert.deepStrictEqual(be.rows.get('w150.plan').value, plan);
+  assert.deepStrictEqual(two.get('w150.sessions', null), sample);
+  assert.deepStrictEqual(log.notice, []);
+  assert.deepStrictEqual(log.remote, []);
+  assert.strictEqual(one.pending() || two.pending(), false);
+});
+
+/* The server takes versions from one global sequence, so a row deleted and inserted again
+   (Clear all, then a new entry, on another device) never comes back with an old version. */
+test('refresh replaces a row deleted and inserted again with a new version', async () => {
+  const { store, be } = setup({ 'w150.sessions': [A, B] }, null, { globalVersions: true });
+  await store.hydrate();
+  be.otherClientRemoves('w150.sessions');
+  be.otherClientWrites('w150.sessions', [C]);
+  assert.deepStrictEqual(await store.refresh(), ['w150.sessions']);
+  assert.deepStrictEqual(store.get('w150.sessions', null), [C]);
+});
+
+test('a put with the version from before a delete and re-insert conflicts and merges', async () => {
+  const { store, timers, be, log } = setup({ 'w150.sessions': [A, B] }, null, { globalVersions: true });
+  await store.hydrate();
+  const old = be.rows.get('w150.sessions').version;
+  be.otherClientRemoves('w150.sessions');
+  be.otherClientWrites('w150.sessions', [C]);
+  store.set('w150.sessions', [A, B, D]);
+  await timers.advance(500);
+  const puts = be.puts();
+  assert.strictEqual(puts.length, 2);
+  assert.strictEqual(puts[0][3], old);
+  assert.notStrictEqual(puts[1][3], old);
+  /* A and B were cleared on the other device, C is its new entry, D is this device's new one */
+  assert.deepStrictEqual(be.rows.get('w150.sessions').value, [C, D]);
+  assert.deepStrictEqual(store.get('w150.sessions', null), [C, D]);
+  assert.deepStrictEqual(log.remote, [['w150.sessions']]);
+  assert.strictEqual(store.pending(), false);
 });
 
 test('remove deletes on server', async () => {

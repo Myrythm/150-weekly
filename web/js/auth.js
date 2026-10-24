@@ -424,6 +424,13 @@
       else if (errText('reg-username') === COPY.taken || errText('reg-username') === COPY.usernameFormat) setErr('reg-username', '');
     } catch (e) { /* the sign-up trigger checks again */ }
   }
+  /* true only when the server says the username is taken; any error or doubt gives false */
+  async function usernameTaken(u) {
+    try {
+      var r = await sb.rpc('username_available', { p_username: u });
+      return !r.error && r.data === false;
+    } catch (e) { return false; }
+  }
   $('reg-username').addEventListener('blur', function () {
     clearTimeout(availTimer);
     availTimer = setTimeout(checkAvailable, 300);
@@ -476,26 +483,31 @@
         options: { data: { username: v.username, display_name: v.displayName, age: String(v.age) }, emailRedirectTo: redirectTo() }
       });
     } catch (e) { r = { error: e }; }
-    setBusy('reg-submit', false);
     var err = r && r.error;
     if (err) {
       var code = String(err.code || '');
       var status = typeof err.status === 'number' ? err.status : 0;
-      if (status === 429 || /rate_limit/.test(code)) { setMsg(COPY.rate, 'error'); return; }
-      if (code === 'weak_password') { setErr('reg-password', COPY.passwordWeak); $('reg-password').focus(); return; }
-      if (code === 'email_address_invalid' || code === 'validation_failed' && /email/i.test(String(err.message))) { setErr('reg-email', COPY.emailFormat); $('reg-email').focus(); return; }
-      if (isNetworkAuthError(err)) { setMsg(COPY.offline, 'error'); return; }
-      /* supabase-js 2.118 reports this 500 as AuthRetryableFetchError, so match on status and code */
-      if (status === 500 || code === 'unexpected_failure' || /database/i.test(String(err.message))) {
-        /* the sign-up trigger refused it: the username was taken after the availability check */
+      if (status === 429 || /rate_limit/.test(code)) { setBusy('reg-submit', false); setMsg(COPY.rate, 'error'); return; }
+      if (code === 'weak_password') { setBusy('reg-submit', false); setErr('reg-password', COPY.passwordWeak); $('reg-password').focus(); return; }
+      if (code === 'email_address_invalid' || code === 'validation_failed' && /email/i.test(String(err.message))) { setBusy('reg-submit', false); setErr('reg-email', COPY.emailFormat); $('reg-email').focus(); return; }
+      if (isNetworkAuthError(err)) { setBusy('reg-submit', false); setMsg(COPY.offline, 'error'); return; }
+      /* supabase-js 2.118 reports this 500 as AuthRetryableFetchError, so match on status and code.
+         A 500 is the sign-up trigger refusing a username taken after the availability check, or
+         any other server failure (for example the confirmation email could not be sent): ask the
+         server which one before blaming the username (the button stays busy meanwhile) */
+      if ((status === 500 || code === 'unexpected_failure' || /database/i.test(String(err.message)))
+          && await usernameTaken(v.username)) {
+        setBusy('reg-submit', false);
         takenName = v.username;
         setErr('reg-username', COPY.taken);
         $('reg-username').focus();
         return;
       }
+      setBusy('reg-submit', false);
       setMsg(COPY.failed, 'error');
       return;
     }
+    setBusy('reg-submit', false);
     $('reg-password').value = '';
     $('reg-password2').value = '';
     $('login-username').value = v.username;

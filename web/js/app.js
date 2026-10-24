@@ -256,6 +256,8 @@ window.W150App = {
   /* The fifth field 'gpx' marks the sample run as an imported track (generated in code by sampleTrack()), so Details works without an upload. */
   const CUR_WEEK = [['walk', 40, 'M', true], ['strength', 15, 'M'], ['walk', 15, 'L'], ['run', 18, 'V', false, 'gpx'], ['walk', 20, 'M']];
 
+  /* Deterministic: fixed ids and times from today's date, so two devices that seed a brand-new
+     account at the same time produce the same sample and the sync merge collapses it to one copy. */
   function seedSessions() {
     const t = today(), ws = weekStart(t), di = dayIndex(t);
     const rows = [];
@@ -263,9 +265,9 @@ window.W150App = {
       arr.forEach(function (r) { rows.push([addDays(ws, -7 * (i + 1) + r[0]), r[1], r[2], r[3], false, false]); });
     });
     CUR_WEEK.forEach(function (r, i) { rows.push([addDays(ws, Math.floor(i * (di + 1) / CUR_WEEK.length)), r[0], r[1], r[2], r[3] === true, r[4] === 'gpx']); });
-    const base = Date.now();
+    const base = t.getTime();
     return rows.map(function (r, i) {
-      const s = { id: makeId() + i, date: ymd(r[0]), type: r[1], minutes: r[2], intensity: r[3] === 'V' ? 'vigorous' : r[3] === 'L' ? 'light' : 'moderate', balance: r[4] === true, source: r[5] ? 'gpx' : 'log', sample: true, createdAt: base - (rows.length - i) * 1000 };
+      const s = { id: 'sample_' + i, date: ymd(r[0]), type: r[1], minutes: r[2], intensity: r[3] === 'V' ? 'vigorous' : r[3] === 'L' ? 'light' : 'moderate', balance: r[4] === true, source: r[5] ? 'gpx' : 'log', sample: true, createdAt: base - (rows.length - i) * 1000 };
       if (r[5]) s.trackId = SAMPLE_TRACK_ID;
       return s;
     });
@@ -349,7 +351,7 @@ window.W150App = {
     } else {
       meta = { v: 1, seeded: true, sampleActive: true };
       sessions = seedSessions();
-      plan = Object.assign({ sample: true, savedAt: Date.now() }, SAMPLE_PLAN);
+      plan = Object.assign({ sample: true, savedAt: today().getTime() }, SAMPLE_PLAN);
       persist();
     }
     migrateSampleBalance(stored);

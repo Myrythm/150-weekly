@@ -40,8 +40,10 @@
  * Conflicts: 'w150.sessions' merges with W150Merge.mergeList by id and 'w150.tracks' with
  * W150Merge.mergeMap, using the last value synced with the server as the base, then writes
  * again with the server's version; onRemoteChange([key]) is called when the merge changed the
- * local value. Other keys: the server value wins, the local change is dropped, onNotice and
- * onRemoteChange([key]) are called. A remove made while a put is in flight is not merged away,
+ * local value. Other keys: the server value wins, the local change is dropped and
+ * onRemoteChange([key]) is called; onNotice too, but only when the local value was a real edit
+ * (it differed from the last synced value). Versions are only compared for equality (the server
+ * never reuses one, even after a delete). A remove made while a put is in flight is not merged away,
  * the delete is sent. Five conflicts in a row are treated like an error (backoff).
  *
  * Auth: a 401 calls refreshAuth(); if it succeeds the write is retried at once (one time, then
@@ -60,7 +62,7 @@ var W150Store = (function () {
   };
   var DEFAULT_RETRY = [1000, 2000, 4000, 8000, 16000, 30000];
   var MAX_CONFLICTS = 5;
-  var NOTICE ='Another device saved a newer version, so your last change there was replaced.';
+  var NOTICE = 'Another device saved a newer version, so your last change was replaced.';
 
   function noop() {}
   function copy(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
@@ -156,13 +158,16 @@ var W150Store = (function () {
         return;
       }
       var changed = !same(e.value, remote);
+      /* only a real local edit (the value differs from the last synced one) was lost; the app
+         rewrites unchanged keys on every save, those adopt the server value without a notice */
+      var edited = !same(e.value, e.synced);
       e.synced = copy(remote);
       e.version = hasRow ? res.version : null;
       e.value = copy(remote);
       e.op = null;
       stopTimer(e);
       if (changed) {
-        call(onNotice, NOTICE);
+        if (edited) call(onNotice, NOTICE);
         call(onRemoteChange, [e.key]);
       }
     }

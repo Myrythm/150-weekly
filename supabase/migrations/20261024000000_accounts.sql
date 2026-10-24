@@ -16,6 +16,10 @@ create table public.profiles (
   created_at timestamptz not null default now()
 );
 
+-- One global sequence for user_data versions (inserts and updates), so a version is never
+-- reused for a user and key, even after the row is deleted and inserted again.
+create sequence public.user_data_version_seq as bigint;
+
 create table public.user_data (
   user_id uuid not null references auth.users (id) on delete cascade,
   key text not null
@@ -23,7 +27,7 @@ create table public.user_data (
       key in ('w150.meta', 'w150.sessions', 'w150.plan', 'w150.prefs', 'w150.breaks', 'w150.tracks')
     ),
   value jsonb not null,
-  version integer not null default 1,
+  version bigint not null default nextval('public.user_data_version_seq'),
   updated_at timestamptz not null default now(),
   primary key (user_id, key)
 );
@@ -43,17 +47,21 @@ revoke all on table public.profiles from public, anon, authenticated;
 revoke all on table public.user_data from public, anon, authenticated;
 revoke all on table public.auth_attempts from public, anon, authenticated;
 revoke all on sequence public.auth_attempts_id_seq from public, anon, authenticated;
+revoke all on sequence public.user_data_version_seq from public, anon, authenticated;
 
 -- Profiles: read own row, change only the display name. Inserts come from the trigger.
 grant select on table public.profiles to authenticated;
 grant update (display_name) on table public.profiles to authenticated;
 
 grant select, insert, update, delete on table public.user_data to authenticated;
+-- put_user_data runs as the caller and takes each new version from this sequence.
+grant usage on sequence public.user_data_version_seq to authenticated;
 
 grant all on table public.profiles to service_role;
 grant all on table public.user_data to service_role;
 grant all on table public.auth_attempts to service_role;
 grant all on sequence public.auth_attempts_id_seq to service_role;
+grant all on sequence public.user_data_version_seq to service_role;
 
 -- ============================================================== RLS
 
@@ -214,11 +222,13 @@ grant execute on function public.username_available(text) to anon, authenticated
 -- Compare-and-set write of one storage key for the calling user.
 -- p_expected_version null: insert, the row must not exist yet.
 -- Otherwise: update only if the stored version equals p_expected_version.
+-- Every successful write takes a new version from user_data_version_seq: versions are only
+-- compared for equality and never come back after a delete (no ABA).
 -- On success ok = true with the new version and value. On conflict ok = false with the
 -- current server version and value (both null when the row does not exist).
 -- Security invoker: RLS applies and the row is always the caller's (auth.uid()).
-create function public.put_user_data(p_key text, p_value jsonb, p_expected_version integer)
-returns table (ok boolean, version integer, value jsonb)
+create function public.put_user_data(p_key text, p_value jsonb, p_expected_version bigint)
+returns table (ok boolean, version bigint, value jsonb)
 language plpgsql
 security invoker
 set search_path = ''
@@ -226,7 +236,7 @@ as $$
 #variable_conflict use_column
 declare
   v_uid uuid := auth.uid();
-  v_version integer;
+  v_version bigint;
   v_value jsonb;
 begin
   if v_uid is null then
@@ -241,12 +251,12 @@ begin
 
   if p_expected_version is null then
     insert into public.user_data as d (user_id, key, value, version)
-    values (v_uid, p_key, p_value, 1)
+    values (v_uid, p_key, p_value, nextval('public.user_data_version_seq'))
     on conflict (user_id, key) do nothing
     returning d.version, d.value into v_version, v_value;
   else
     update public.user_data as d
-    set value = p_value, version = d.version + 1
+    set value = p_value, version = nextval('public.user_data_version_seq')
     where d.user_id = v_uid and d.key = p_key and d.version = p_expected_version
     returning d.version, d.value into v_version, v_value;
   end if;
@@ -264,5 +274,5 @@ begin
 end;
 $$;
 
-revoke all on function public.put_user_data(text, jsonb, integer) from public, anon, authenticated, service_role;
-grant execute on function public.put_user_data(text, jsonb, integer) to authenticated;
+revoke all on function public.put_user_data(text, jsonb, bigint) from public, anon, authenticated, service_role;
+grant execute on function public.put_user_data(text, jsonb, bigint) to authenticated;

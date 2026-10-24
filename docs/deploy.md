@@ -20,7 +20,7 @@ The project is a git repository (branch `feat/web-supabase`). Push it to a Git h
    ```
    npx supabase secrets set AUTH_REDIRECT_ORIGINS=https://<domain>
    ```
-   Add the preview or custom domains too if they must work (`https://<domain>,https://www.<domain>`). A mixed-case value will not match the browser's lowercase origin.
+   Add the preview or custom domains too if they must work (`https://<domain>,https://www.<domain>`). A mixed-case value will not match the browser's lowercase origin. If `AUTH_REDIRECT_ORIGINS` is not set, the functions fall back to the local origins (`http://127.0.0.1:8160,http://localhost:8160`) and recovery requests from the real domain answer 400.
 6. Later, for the AI assistant: `npx supabase secrets set OPENAI_API_KEY=...`. It is a function secret only and must never appear in `web/` or in a committed file.
 
 ## 3. Auth settings (dashboard, Authentication)
