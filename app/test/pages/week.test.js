@@ -386,7 +386,15 @@ describe('router scroll behaviour', function () {
     s.data.ready = true;
     await flushPromises();
     expect(done).toBe(true);
-    expect(await p).toEqual({ el: '#log' });
+    expect(await p).toEqual({ el: '#log', top: 0 });
+  });
+
+  test('the scroll to a section keeps the target scroll-margin-top below the sticky header', async function () {
+    const s = setup({ age: 30 });
+    document.body.innerHTML = '<div id="splits" style="scroll-margin-top: 72px"></div><div id="plain"></div>';
+    const sb = s.router.options.scrollBehavior;
+    expect(await sb(s.router.resolve('/#splits'), s.router.currentRoute.value, null)).toEqual({ el: '#splits', top: 72 });
+    expect(await sb(s.router.resolve('/#plain'), s.router.currentRoute.value, null)).toEqual({ el: '#plain', top: 0 });
   });
 
   test('a hash that names no element, and no hash, scroll to the top; a saved position is kept', async function () {

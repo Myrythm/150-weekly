@@ -15,7 +15,7 @@
  * event from another tab.
  *
  * scrollBehavior: an app route waits for the data to be ready and one tick, then scrolls to the hash
- * element (a section link such as /#splits), to a saved position (back and forward), or to the top.
+ * element (a section link such as /#splits) minus its scroll-margin-top, to a saved position (back and forward), or to the top.
  */
 import { watch, nextTick } from 'vue';
 import { createRouter, createWebHistory, START_LOCATION } from 'vue-router';
@@ -72,13 +72,18 @@ export function createAppRouter(pinia, opts) {
     });
   }
 
+  function scrollMarginTop(el) {
+    try { return parseFloat(window.getComputedStyle(el).getPropertyValue('scroll-margin-top')) || 0; } catch (e) { return 0; }
+  }
+
   function scrollBehavior(to, from, saved) {
     const place = function () {
       if (saved) return saved;
       const id = to.hash.length > 1 ? to.hash.slice(1) : '';
       const el = id ? document.getElementById(id) : null;
       /* a target inside a hidden panel (the log panel while the age step shows) cannot be scrolled to */
-      if (el && !el.closest('[hidden]')) return { el: to.hash };
+      /* vue-router scrolls to the element's exact top; the sticky header needs the CSS scroll-margin-top (72px, 120px on phones) kept, as a native hash scroll does */
+      if (el && !el.closest('[hidden]')) return { el: to.hash, top: scrollMarginTop(el) };
       return { top: 0 };
     };
     if (!to.meta.auth) return place();
