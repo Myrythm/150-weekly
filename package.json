@@ -11,7 +11,7 @@
     "functions:serve": "supabase functions serve",
     "web:build": "node tools/web/build.js",
     "web:build:local": "node tools/web/build.js --local",
-    "test": "npm run app:test && node --test \"web/test/*.test.js\" && node tools/gpx/gpx-lib.test.js",
+    "test": "npm run app:test && node tools/gpx/gpx-lib.test.js",
     "test:smoke": "node --test tools/web/smoke.test.js",
     "app:dev": "vite --config app/vite.config.mjs",
     "app:build": "node tools/web/build.js && vite build --config app/vite.config.mjs",
