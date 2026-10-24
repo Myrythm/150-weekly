@@ -169,8 +169,12 @@ begin
     raise exception 'Username is already taken.' using errcode = '23505';
   end if;
 
-  insert into public.profiles (username, user_id, display_name)
-  values (v_username, new.id, v_display_name);
+  begin
+    insert into public.profiles (username, user_id, display_name)
+    values (v_username, new.id, v_display_name);
+  exception when unique_violation then
+    raise exception 'Username is already taken.' using errcode = '23505';
+  end;
 
   insert into public.user_data (user_id, key, value)
   values (new.id, 'w150.prefs', jsonb_build_object('age', v_age));
@@ -232,9 +236,8 @@ begin
      or p_key not in ('w150.meta', 'w150.sessions', 'w150.plan', 'w150.prefs', 'w150.breaks', 'w150.tracks') then
     raise exception 'Key % is not allowed.', coalesce(p_key, 'null') using errcode = '23514';
   end if;
-  if p_value is null then
-    raise exception 'Value is required.' using errcode = '23502';
-  end if;
+  -- supabase-js sends a JSON null argument as SQL NULL; store it as JSON null.
+  p_value := coalesce(p_value, 'null'::jsonb);
 
   if p_expected_version is null then
     insert into public.user_data as d (user_id, key, value, version)

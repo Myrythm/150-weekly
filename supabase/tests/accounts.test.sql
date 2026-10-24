@@ -3,7 +3,7 @@
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(56);
+select plan(59);
 
 -- Runs a statement and returns the number of affected rows (as the current role).
 create function pg_temp.affected(sql text) returns integer
@@ -47,9 +47,9 @@ select results_eq(
 select throws_ok(
   $$insert into auth.users (id, email, raw_user_meta_data) values
     ('a0000000-0000-0000-0000-000000000001', 'dup@example.com',
-     '{"username":"budi_1","display_name":"Dup","age":"30"}')$$,
-  '23505', null,
-  'duplicate username is rejected'
+     '{"username":" BUDI_1 ","display_name":"Dup","age":"30"}')$$,
+  '23505', 'Username is already taken.',
+  'duplicate username is rejected after trimming and lowercasing'
 );
 
 select throws_ok(
@@ -234,6 +234,20 @@ select throws_ok(
   'disallowed key throws even with an expected version'
 );
 
+-- supabase-js sends a JSON null argument as SQL NULL; it is stored as JSON null.
+select results_eq(
+  $$select ok, version from public.put_user_data('w150.plan', null, null)$$,
+  $$values (true, 1)$$,
+  'SQL NULL value is accepted'
+);
+
+select is(
+  (select value from public.user_data
+   where user_id = '11111111-1111-1111-1111-111111111111' and key = 'w150.plan'),
+  'null'::jsonb,
+  'SQL NULL value is stored as JSON null'
+);
+
 reset role;
 
 -- updated_at trigger
@@ -353,6 +367,12 @@ select throws_ok(
   $$select count(*) from public.auth_attempts$$,
   '42501', null,
   'anon cannot read auth_attempts'
+);
+
+select throws_ok(
+  $$select count(*) from public.profiles$$,
+  '42501', null,
+  'anon cannot read profiles'
 );
 
 reset role;
