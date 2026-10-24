@@ -7,7 +7,9 @@
  *                       (API_URL, ANON_KEY).
  *   web/js/gpx-lib.js   byte for byte copy of tools/gpx/gpx-lib.js
  *
- * Exits 1 when a variable is missing. Only the public URL and anon key are ever written.
+ * Exits 1 when a variable is missing, or when SUPABASE_ANON_KEY is a secret key (sb_secret_...) or
+ * a JWT whose role is not "anon" (for example a service_role key). Only the public URL and anon
+ * key are ever written.
  */
 'use strict';
 const fs = require('fs');
@@ -51,6 +53,24 @@ if (local) {
   if (!url) fail('SUPABASE_URL is not set (environment or .env)');
   if (!key) fail('SUPABASE_ANON_KEY is not set (environment or .env)');
 }
+
+// Refuse a key that is not meant for browsers. Keys that are neither a JWT nor an sb_ key pass.
+function checkAnonKey(k) {
+  if (k.indexOf('sb_secret_') === 0) fail('SUPABASE_ANON_KEY is a secret key (sb_secret_...). Use the anon or publishable key.');
+  if (k.indexOf('sb_publishable_') === 0) return;
+  const parts = k.split('.');
+  if (parts.length !== 3) return;
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  } catch (e) {
+    return; // not a JWT
+  }
+  if (payload && typeof payload === 'object' && payload.role !== 'anon') {
+    fail('SUPABASE_ANON_KEY is a JWT with role "' + payload.role + '", expected "anon". Never put a service role key in the web build.');
+  }
+}
+checkAnonKey(key);
 
 const config = 'window.W150_CONFIG = ' + JSON.stringify({ supabaseUrl: url, supabaseAnonKey: key }) + ';\n';
 fs.mkdirSync(path.join(root, 'web', 'js'), { recursive: true });

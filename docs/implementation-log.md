@@ -1,4 +1,4 @@
-# Implementation log (fixes A to H)
+# Implementation log (fixes A to I)
 
 ## A. #6 Age first, then the age group's WHO 2020 guideline (Opus)
 
@@ -158,3 +158,43 @@ GUIDE_NOTE = copy for the unset preview and the under-5 state (unsetChip, under5
 - New tokens in all three blocks: `--ramp-1..4` and `--chart-area`. New CSS sections: "GPX import" and "GPX detail". No literal colours outside the token blocks.
 
 **Verified:** inline script `node --check` passes, zero em or en dashes, gpx-lib.js is present verbatim, and `node gpx-lib.test.js` gives 50/50. Doctype-wrapped copy served from scratchpad/gsrv (server stopped). Imports used a DataTransfer built from fetched file text, set on `#gpx-file` plus a change event; one batch used a synthetic drop on `#gpx-bar` and one on `#gpx-drop`. Real Mi file: 2.02 km, 13:27 moving, 6:39 /km, 13 min prefilled, date Wed 7 Oct 01:48 (UTC+7 browser), device note 5.05 km vs 2.02 km, vigorous from speed 9.0 km/h. Garmin (age 40): HR basis 144 bpm, 80% of 180, vigorous; pace, elevation and HR charts. Age 15 gives max 198 (Tanaka), 73%, moderate. Strava ride: 25.3 km/h, power 176/263 W, 5 km splits; speed basis without age. Open water: 2:06 /100 m; with HR, 76% moderate; without age, speed 2.9 km/h vigorous. Pool and not-gpx files give inline errors in a 4 file batch. Also checked: route-only (no times), duplicate warning, date and minutes validation, Remove/Undo of track, quota error path (setItem patched), cap (35 tracks injected, then 30 after an import), "no longer stored" view, Clear all. 400px light and dark: scrollWidth 400, no overflowing elements. 1003px in the pane, 1280 light and dark by headless Chrome screenshots. No console errors. Not published.
+
+
+## I. Web version with accounts (Supabase, Vercel prep)
+
+Branch `feat/web-supabase`, commits `7338a76` (tooling) to `104c17c` (auth screens), plus the Task 7 docs commit. The Artifact `weekly-150.html` is untouched and frozen at v5. Plan: `docs/superpowers/plans/2026-10-24-web-supabase.md`; spec: `docs/superpowers/specs/2026-10-23-web-supabase-design.md`.
+
+**Files**
+- Tooling: `package.json` (scripts `db:start`, `db:stop`, `db:reset`, `db:test`, `functions:serve`, `web:build`, `web:build:local`, `test`, `test:smoke`; dev dependency `supabase` 2.122.0), `package-lock.json`, `.env.example`, `supabase/functions/.env.example`, `.claude/launch.json` (`weekly150-web`), `vercel.json`.
+- Database: `supabase/config.toml`, `supabase/migrations/20261024000000_accounts.sql`, `supabase/tests/accounts.test.sql` (59 pgTAP assertions).
+- Functions: `supabase/functions/_shared/auth.ts`, `auth-login/index.ts`, `auth-recover/index.ts`.
+- Web: `web/index.html`, `web/css/app.css`, `web/js/app.js`, `web/js/auth.js`, `web/js/store.js`, `web/js/merge.js`, `web/test/store.test.js`, `web/test/merge.test.js`; generated and git-ignored: `web/config.js`, `web/js/gpx-lib.js`.
+- Tools: `tools/web/build.js`, `tools/web/serve.js`, `tools/web/smoke.test.js`.
+- Docs: `docs/local-dev.md`, `docs/deploy.md`, `CLAUDE.md`, `docs/PROGRESS.md`, this entry.
+
+**Database**
+- Tables: `public.profiles` (`username` primary key matching `^[a-z0-9_]{3,20}$`, `user_id` unique to `auth.users`, `display_name` trimmed 1 to 40), `public.user_data` (`user_id`, `key` limited to the six allowed `w150.*` keys, `value jsonb`, `version int`, `updated_at`), `public.auth_attempts` (`bucket`, `created_at`, index on both). RLS on all three; `user_data` and `profiles` policies are `to authenticated` with `(select auth.uid())`; `auth_attempts` has no policies and no client grants. Privileges are explicit (revoke all, then grant). Anon gets 42501 on every table.
+- `handle_new_user()` (security definer, empty `search_path`, trigger `on_auth_user_created` after insert on `auth.users`): validates username, display name and age from user metadata, inserts the profile and a `w150.prefs` row `{"age": N}`. Errors: 22023 for invalid input, 23505 `Username is already taken.` (also on the insert race).
+- `username_available(p_username)` (anon, authenticated, service role). `put_user_data(p_key, p_value, p_expected_version)` returns `(ok, version, value)`; a null `p_expected_version` inserts with `on conflict do nothing`, otherwise an atomic update on the version; SQL NULL value is stored as JSON null; only for `authenticated`.
+
+**Functions** (both `verify_jwt = false`)
+- Shared: `normaliseUsername`, `COPY` (exact copy), `PAD_MS` 400, `allowedOrigins` from `AUTH_REDIRECT_ORIGINS`, `preflight`, `clientIp` (first `x-forwarded-for` entry), `reserveAttempt`/`releaseAttempts`/`hitRateLimit`, `emailForUsername` (profiles then `auth.admin.getUserById`, never user metadata), supabase-js `2.117.2` through `npm:`.
+- `auth-login`: reserve one attempt row in `login:u:<username>` and `login:ip:<ip>`, count, 429 over 10 and 30 in 15 minutes; the unknown username runs `signInWithPassword` against a dummy email; 200 returns only `{ session }`; 403 `email_not_confirmed`; `invalid_credentials` keeps its rows (counts as failed), all other outcomes release them; other GoTrue or database errors give a padded 500.
+- `auth-recover`: validates input and `redirectTo` before limiting; buckets `recover:ip:<ip>` (10) and `recover:id:<identifier>` (3); the lookup and send run in `EdgeRuntime.waitUntil`; always a padded neutral 200.
+
+**Web modules and ids**
+- `W150Merge.mergeList/mergeMap(base, local, remote)` with the three-way delete rule. `W150Store.create(backend, opts)`: `hydrate`, `get`, `set`, `remove`, `flush`, `pending`, `refresh`, `reset`; versioned puts, backoff 1, 2, 4, 8, 16, 30 s, 401 then `refreshAuth`, merge on conflict for sessions and tracks, server wins elsewhere.
+- `W150App.start(ctx)` (once), `reload()`, `setSyncStatus(state)`. `ctx` carries `store`, `profile`, `onLogout`, `onClearAll`. `clearAllData` is async, keeps `prefs.age`, calls `ctx.onClearAll()`. `saveTracks` saves `{}` when empty. Theme stays in localStorage (`loadTheme`/`saveTheme`).
+- Auth screens: `#auth`, `#auth-login`, `#auth-register`, `#auth-check-email`, `#auth-forgot`, `#auth-reset`, message area `#auth-msg`, `#auth-loading`, `#resend-verification`, `#forgot-submit`, `#forgot-resend`, `#check-to-login`, `#forgot-to-login`. App shell: `#app`, `#sync-status`, `#who-name`, `#logout`, `#bib-name`.
+- `auth.js` reads `location.hash` and search before `createClient` (supabase-js consumes the hash), cleans the URL after `getSession()`, routes `error_code` to the forgot screen, recovery to the reset screen, `type=signup` to login with `Email verified. You can log in now.`
+
+**Decisions**
+- Fork, not rewrite: markup, CSS and script come from the Artifact (CSS byte for byte), GPX parser removed from the page script and loaded as `web/js/gpx-lib.js` (copy of `tools/gpx/gpx-lib.js` made by the build). Rule: edit `tools/gpx/gpx-lib.js` only.
+- Anon cannot read tables (42501), reserve then release rate limiting, only `invalid_credentials` counts as a failed login, three-way delete rule in merge, server wins on other key conflicts, logout is `scope: 'local'`, a failed refresh is the only thing that shows the login screen while the app is open, cross-tab user switch resets the store and reloads. Details and reasons are in `docs/PROGRESS.md`.
+- Build guard: `tools/web/build.js` rejects a `SUPABASE_ANON_KEY` that starts with `sb_secret_` or is a JWT whose payload `role` is not `anon` (not a JWT and not `sb_*`: allowed). Checked with a fake service_role JWT (exit 1), `sb_secret_abc` (exit 1), a fake anon JWT, `sb_publishable_abc`, `x`, and the real local key (all pass).
+- `weekly150-web` runs `node tools/web/serve.js` (python is not on PATH).
+- Local-only config: `[auth.rate_limit] email_sent = 60` and `sign_in_sign_ups = 300`. Cloud: custom SMTP, default `email_sent`, raised `sign_in_sign_ups`.
+
+**Verified:** see each task report in `.superpowers/sdd/2026-10-24-web-supabase/`. Final state of Task 7: `npm test` (43 node tests, gpx 42 passed and 1 skipped: the private real GPX file is not in the repo, so "50 passed" is not reproducible here), `npm run db:test`, `npm run test:smoke`; no em or en dashes in `web/`, `supabase/`, `tools/web/`, `docs/`; no `service_role` text in `web/`.
+
+**Not done:** deploy (Supabase cloud, Vercel, SMTP), AI assistant, account deletion. See the open items in `docs/PROGRESS.md` and the follow-ups in `docs/deploy.md`.

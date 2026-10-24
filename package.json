@@ -8,6 +8,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
+    "functions:serve": "supabase functions serve",
     "web:build": "node tools/web/build.js",
     "web:build:local": "node tools/web/build.js --local",
     "test": "node --test \"web/test/*.test.js\" && node tools/gpx/gpx-lib.test.js",
