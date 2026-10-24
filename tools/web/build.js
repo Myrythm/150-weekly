@@ -1,11 +1,13 @@
 /*
- * Build step for the web version. Run from anywhere: node tools/web/build.js [--local]
+ * Build step for the web version (the Vue app in app/). Run from anywhere:
+ * node tools/web/build.js [--local]
  *
- *   web/config.js       window.W150_CONFIG = { supabaseUrl, supabaseAnonKey }
- *                       from SUPABASE_URL / SUPABASE_ANON_KEY (process env, then .env in the
- *                       project root), or with --local from `npx supabase status -o env`
- *                       (API_URL, ANON_KEY).
- *   web/js/gpx-lib.js   byte for byte copy of tools/gpx/gpx-lib.js
+ * The URL and anon key come from SUPABASE_URL / SUPABASE_ANON_KEY (process env, then .env in the
+ * project root), or with --local from `npx supabase status -o env` (API_URL, ANON_KEY). Writes:
+ *
+ *   app/.env.local      VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY for the Vue app (git-ignored)
+ *   app/public/gpx-lib.js  byte for byte copy of tools/gpx/gpx-lib.js, loaded by app/index.html
+ *                       as a classic script (git-ignored)
  *
  * Exits 1 when a variable is missing, or when SUPABASE_ANON_KEY is a secret key (sb_secret_...) or
  * a JWT whose role is not "anon" (for example a service_role key). Only the public URL and anon
@@ -72,8 +74,8 @@ function checkAnonKey(k) {
 }
 checkAnonKey(key);
 
-const config = 'window.W150_CONFIG = ' + JSON.stringify({ supabaseUrl: url, supabaseAnonKey: key }) + ';\n';
-fs.mkdirSync(path.join(root, 'web', 'js'), { recursive: true });
-fs.writeFileSync(path.join(root, 'web', 'config.js'), config);
-fs.copyFileSync(path.join(root, 'tools', 'gpx', 'gpx-lib.js'), path.join(root, 'web', 'js', 'gpx-lib.js'));
-console.log('web build: wrote web/config.js (' + url + ') and web/js/gpx-lib.js');
+// Vite reads app/.env.local, and app/index.html loads app/public/gpx-lib.js as a classic script.
+fs.mkdirSync(path.join(root, 'app', 'public'), { recursive: true });
+fs.writeFileSync(path.join(root, 'app', '.env.local'), 'VITE_SUPABASE_URL=' + url + '\nVITE_SUPABASE_ANON_KEY=' + key + '\n');
+fs.copyFileSync(path.join(root, 'tools', 'gpx', 'gpx-lib.js'), path.join(root, 'app', 'public', 'gpx-lib.js'));
+console.log('web build: wrote app/.env.local (' + url + ') and app/public/gpx-lib.js');

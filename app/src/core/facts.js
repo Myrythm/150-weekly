@@ -1,0 +1,27 @@
+/* ===== Evidence slots: a row renders only when stat, claim and url are all filled ===== Moved verbatim from web/js/app.js. */
+export const FACTS = [
+  { id: "FACT_1", stat: "150 min",
+    claim: "WHO's 2020 guideline for adults is 150 to 300 minutes of moderate activity a week, or 75 to 150 minutes of vigorous activity, plus muscle-strengthening on 2 or more days.",
+    sourceLabel: "Bull et al., British Journal of Sports Medicine, 2020",
+    url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC7719906/" },
+  { id: "FACT_2", stat: "8,000 steps",
+    claim: "In a study of US adults, those who averaged 8,000 steps a day had about half the risk of death over roughly 10 years compared with those who averaged 4,000.",
+    sourceLabel: "Saint-Maurice et al., JAMA, 2020;323(12):1151-1160",
+    url: "https://jamanetwork.com/journals/jama/fullarticle/2763292" },
+  { id: "FACT_3", stat: "97 reviews",
+    claim: "Across 97 reviews covering about 128,000 people, physical activity was linked to less depression, anxiety and distress than usual care.",
+    sourceLabel: "Singh et al., British Journal of Sports Medicine, 2023;57(18):1203-1209",
+    url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC10579187/" },
+  { id: "FACT_4", stat: "15 min",
+    claim: "In 416,175 Taiwanese adults, about 15 minutes of activity a day was linked to a 14% lower risk of death and about three more years of life expectancy.",
+    sourceLabel: "Wen et al., The Lancet, 2011;378(9798):1244-1253",
+    url: "https://pubmed.ncbi.nlm.nih.gov/21846575/" },
+  { id: "FACT_5", stat: "66 days",
+    claim: "In 96 people repeating one daily behavior, a new habit typically took about 66 days to feel automatic, with wide variation. One missed day made little difference.",
+    sourceLabel: "Lally et al., European Journal of Social Psychology, 2010",
+    url: "https://doi.org/10.1002/ejsp.674" },
+  { id: "FACT_6", stat: "1 to 2 days",
+    claim: "In a large UK study, adults who fit their activity into one or two sessions a week still had lower death rates than inactive adults.",
+    sourceLabel: "O'Donovan et al., JAMA Internal Medicine, 2017;177(3):335-342",
+    url: "https://doi.org/10.1001/jamainternmed.2016.8014" }
+];
