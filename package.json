@@ -1,0 +1,19 @@
+{
+  "name": "weekly-150-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset",
+    "db:test": "supabase test db",
+    "web:build": "node tools/web/build.js",
+    "web:build:local": "node tools/web/build.js --local",
+    "test": "node --test \"web/test/*.test.js\" && node tools/gpx/gpx-lib.test.js",
+    "test:smoke": "node --test tools/web/smoke.test.js"
+  },
+  "devDependencies": {
+    "supabase": "2.122.0"
+  }
+}
