@@ -13,13 +13,17 @@
  * copy. The first route of a page load drops any auth link left in the URL. Watchers move the
  * visitor when the state changes outside a navigation: login done, session ended, a recovery
  * event from another tab.
+ *
+ * scrollBehavior: an app route waits for the data to be ready and one tick, then scrolls to the hash
+ * element (a section link such as /#splits), to a saved position (back and forward), or to the top.
  */
-import { watch } from 'vue';
+import { watch, nextTick } from 'vue';
 import { createRouter, createWebHistory, START_LOCATION } from 'vue-router';
 import { useAuthStore } from './stores/auth.js';
+import { useDataStore } from './stores/data.js';
 import { COPY } from './auth/copy.js';
 import { cleanLocation, safeNext } from './auth/link.js';
-import PlaceholderPage from './pages/PlaceholderPage.vue';
+import WeekPage from './pages/WeekPage.vue';
 import LogPage from './pages/LogPage.vue';
 import ActivityPage from './pages/ActivityPage.vue';
 import LoginPage from './pages/auth/LoginPage.vue';
@@ -39,7 +43,7 @@ export function createAppRouter(pinia, opts) {
   const auth = useAuthStore(pinia);
 
   const routes = [
-    { path: '/', name: 'week', component: PlaceholderPage, meta: { auth: true } },
+    { path: '/', name: 'week', component: WeekPage, meta: { auth: true } },
     { path: '/log', name: 'log', component: LogPage, meta: { auth: true, title: 'Full log, Weekly 150' } },
     { path: '/activity/:id', name: 'activity', component: ActivityPage, meta: { auth: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { guest: true } },
@@ -58,7 +62,30 @@ export function createAppRouter(pinia, opts) {
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ];
 
-  const router = createRouter({ history: opts.history || createWebHistory(), routes: routes });
+  const data = useDataStore(pinia);
+
+  /* the page shows its sections only once the data is loaded, so a hash target exists after that */
+  function whenDataReady() {
+    return new Promise(function (resolve) {
+      if (data.ready) { resolve(); return; }
+      const stop = watch(function () { return data.ready; }, function (on) { if (on) { stop(); resolve(); } });
+    });
+  }
+
+  function scrollBehavior(to, from, saved) {
+    const place = function () {
+      if (saved) return saved;
+      const id = to.hash.length > 1 ? to.hash.slice(1) : '';
+      const el = id ? document.getElementById(id) : null;
+      /* a target inside a hidden panel (the log panel while the age step shows) cannot be scrolled to */
+      if (el && !el.closest('[hidden]')) return { el: to.hash };
+      return { top: 0 };
+    };
+    if (!to.meta.auth) return place();
+    return whenDataReady().then(nextTick).then(place);
+  }
+
+  const router = createRouter({ history: opts.history || createWebHistory(), routes: routes, scrollBehavior: scrollBehavior });
 
   function loggedIn() { return !!auth.user && !auth.sessionEnded; }
 

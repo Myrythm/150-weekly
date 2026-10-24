@@ -280,7 +280,7 @@ describe('app', function () {
     expect(wrapper.find('#wordmark').exists()).toBe(true);
     expect(wrapper.find('#live').exists()).toBe(true);
     expect(wrapper.find('footer.site-footer').exists()).toBe(true);
-    expect(wrapper.find('#placeholder-page').exists()).toBe(true);
+    expect(wrapper.find('#week-heading').exists()).toBe(true);
     expect(wrapper.find('#placeholder-logout').exists()).toBe(false);
     expect(wrapper.find('main#main').exists()).toBe(true);
     expect(wrapper.find('.skip-link').attributes('href')).toBe('#main');
