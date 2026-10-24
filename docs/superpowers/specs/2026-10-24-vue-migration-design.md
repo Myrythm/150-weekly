@@ -8,7 +8,7 @@ Date: 2026-10-24. Branch: `feat/vue-migration` (from `feat/full-log-pages`, PR #
 
 ## Decisions (agreed with the owner)
 
-1. **Stack:** Vue 3 (Composition API, `<script setup>`), Vue Router 4 in history mode, Pinia, Vite, Vitest with `@vue/test-utils` and `happy-dom`. Plain JavaScript, no TypeScript. `@supabase/supabase-js` from npm, pinned to 2.118.0 (the version the current page loads).
+1. **Stack:** Vue 3.5 (Composition API, `<script setup>`), Vue Router 5 in history mode, Pinia 4, Vite 8, Vitest 5 with `@vue/test-utils` and `happy-dom`. Plain JavaScript, no TypeScript. `@supabase/supabase-js` from npm, pinned to 2.118.0 (the version the current page loads).
 2. **Not Next.js, not React:** all pages are behind a login, so server rendering and SEO bring nothing; Supabase (RLS, Edge Functions) is the server. Vue templates take the existing markup almost verbatim.
 3. **Port, not redesign.** Behaviour, copy, element ids, classes and CSS come from `web/` at commit `83e82d3` (the reference). Exercise rules, sample data, Undo, merge and auth flows behave exactly as now. Visual changes are out of scope.
 4. **Folder:** the Vue app lives in `app/` (Vite root `app/`, sources `app/src/`, tests `app/test/`, output `app/dist/`). `web/` stays untouched as the reference until the cutover task deletes it.

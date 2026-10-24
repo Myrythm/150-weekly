@@ -6,7 +6,7 @@
 
 **Architecture:** Pure rules and data helpers move into framework-free ES modules (`app/src/core/`), the sync engine becomes ES modules (`app/src/sync/`) wrapped by Pinia stores, and every screen becomes a component under Vue Router (`/`, `/log`, `/activity/:id`, auth routes). The old `web/` app is the behavioural reference until the last task removes it.
 
-**Tech Stack:** Vue 3 (`<script setup>`, plain JavaScript), Vue Router 4 (history mode), Pinia, Vite, Vitest + `@vue/test-utils` + `happy-dom`, `@supabase/supabase-js` 2.118.0 from npm, Node 24, Supabase CLI local stack (unchanged), Vercel.
+**Tech Stack:** Vue 3 (`<script setup>`, plain JavaScript), Vue Router 5 (history mode), Pinia, Vite, Vitest + `@vue/test-utils` + `happy-dom`, `@supabase/supabase-js` 2.118.0 from npm, Node 24, Supabase CLI local stack (unchanged), Vercel.
 
 **Spec:** `docs/superpowers/specs/2026-10-24-vue-migration-design.md`. Behavioural reference: `web/` at commit `83e82d3` (`web/index.html`, `web/log.html`, `web/activity.html`, `web/js/app.js`, `web/js/auth.js`, `web/js/auth-screens.js`, `web/js/store.js`, `web/js/merge.js`, `web/css/app.css`), and `docs/PROGRESS.md`.
 
