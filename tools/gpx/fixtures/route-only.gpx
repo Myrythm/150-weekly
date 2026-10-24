@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<gpx creator="Route Planner" version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+ <rte>
+  <name>Sunday loop</name>
+  <rtept lat="51.500000" lon="-0.120000"><ele>40.0</ele></rtept>
+  <rtept lat="51.500274" lon="-0.119315"><ele>41.7</ele></rtept>
+  <rtept lat="51.500556" lon="-0.118631"><ele>43.3</ele></rtept>
+  <rtept lat="51.500846" lon="-0.117951"><ele>44.8</ele></rtept>
+  <rtept lat="51.501144" lon="-0.117276"><ele>46.2</ele></rtept>
+  <rtept lat="51.501449" lon="-0.116607"><ele>47.4</ele></rtept>
+  <rtept lat="51.501762" lon="-0.115947"><ele>48.4</ele></rtept>
+  <rtept lat="51.502080" lon="-0.115295"><ele>49.2</ele></rtept>
+  <rtept lat="51.502404" lon="-0.114654"><ele>49.7</ele></rtept>
+  <rtept lat="51.502732" lon="-0.114024"><ele>50.0</ele></rtept>
+  <rtept lat="51.503064" lon="-0.113406"><ele>50.0</ele></rtept>
+  <rtept lat="51.503399" lon="-0.112801"><ele>49.7</ele></rtept>
+  <rtept lat="51.503735" lon="-0.112210"><ele>49.1</ele></rtept>
+  <rtept lat="51.504072" lon="-0.111632"><ele>48.3</ele></rtept>
+  <rtept lat="51.504408" lon="-0.111067"><ele>47.2</ele></rtept>
+  <rtept lat="51.504743" lon="-0.110516"><ele>46.0</ele></rtept>
+  <rtept lat="51.505075" lon="-0.109977"><ele>44.6</ele></rtept>
+  <rtept lat="51.505404" lon="-0.109451"><ele>43.0</ele></rtept>
+  <rtept lat="51.505728" lon="-0.108936"><ele>41.4</ele></rtept>
+  <rtept lat="51.506048" lon="-0.108432"><ele>39.7</ele></rtept>
+  <rtept lat="51.506361" lon="-0.107938"><ele>38.1</ele></rtept>
+  <rtept lat="51.506667" lon="-0.107451"><ele>36.5</ele></rtept>
+  <rtept lat="51.506966" lon="-0.106971"><ele>35.0</ele></rtept>
+  <rtept lat="51.507257" lon="-0.106496"><ele>33.6</ele></rtept>
+  <rtept lat="51.507540" lon="-0.106025"><ele>32.4</ele></rtept>
+  <rtept lat="51.507815" lon="-0.105555"><ele>31.5</ele></rtept>
+  <rtept lat="51.508082" lon="-0.105086"><ele>30.7</ele></rtept>
+  <rtept lat="51.508340" lon="-0.104615"><ele>30.2</ele></rtept>
+  <rtept lat="51.508590" lon="-0.104142"><ele>30.0</ele></rtept>
+  <rtept lat="51.508832" lon="-0.103663"><ele>30.1</ele></rtept>
+  <rtept lat="51.509066" lon="-0.103178"><ele>30.4</ele></rtept>
+  <rtept lat="51.509294" lon="-0.102686"><ele>31.0</ele></rtept>
+  <rtept lat="51.509515" lon="-0.102184"><ele>31.9</ele></rtept>
+  <rtept lat="51.509731" lon="-0.101673"><ele>32.9</ele></rtept>
+  <rtept lat="51.509942" lon="-0.101150"><ele>34.2</ele></rtept>
+  <rtept lat="51.510150" lon="-0.100615"><ele>35.7</ele></rtept>
+  <rtept lat="51.510354" lon="-0.100067"><ele>37.2</ele></rtept>
+  <rtept lat="51.510557" lon="-0.099506"><ele>38.8</ele></rtept>
+  <rtept lat="51.510759" lon="-0.098931"><ele>40.5</ele></rtept>
+  <rtept lat="51.510962" lon="-0.098343"><ele>42.2</ele></rtept>
+ </rte>
+</gpx>
