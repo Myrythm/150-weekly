@@ -2,6 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     { "name": "weekly150-preview", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8150", "--bind", "127.0.0.1", "--directory", ".claude/preview"], "port": 8150 },
-    { "name": "weekly150-web", "runtimeExecutable": "node", "runtimeArgs": ["tools/web/serve.js"], "port": 8160 }
+    { "name": "weekly150-web", "runtimeExecutable": "node", "runtimeArgs": ["tools/web/serve.js"], "port": 8160 },
+    { "name": "weekly150-app", "runtimeExecutable": "npm", "runtimeArgs": ["run", "app:dev"], "port": 8160 }
   ]
 }
