@@ -3,14 +3,19 @@
    components in the reference order: sample banner, hero band (age step and log panel inside it),
    splits. The streak, plan, snacks and evidence sections follow in the next task. The header Log
    links and Change age ask for focus through ui.pendingFocus; the page does it once the hero is
-   mounted. */
+   mounted. The page owns the GPX import queue (useGpxQueue), which also guards the window
+   against a file dropped outside the drop zones. */
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { useUiStore } from '../stores/ui.js';
 import SampleBanner from '../components/SampleBanner.vue';
 import HeroBand from '../components/HeroBand.vue';
 import SplitsSection from '../components/SplitsSection.vue';
+import GpxImport from '../components/GpxImport.vue';
+import { useGpxQueue } from '../composables/useGpxQueue.js';
 
 const ui = useUiStore();
+/* the page's one GPX import queue: the log panel drop zone and the splits import controls share it */
+useGpxQueue();
 const hero = ref(null);
 const logStatus = ref('');
 
@@ -40,8 +45,7 @@ async function onSampleCleared(notice) {
   <main id="main">
     <HeroBand ref="hero" v-model:log-status="logStatus" />
     <SplitsSection>
-      <!-- Task 10: #gpx-bar, #gpx-errors, #gpx-status, #gpx-last and the #gpx-review form go in the import slot -->
-      <template #import></template>
+      <template #import><GpxImport /></template>
     </SplitsSection>
   </main>
 </template>

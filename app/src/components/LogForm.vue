@@ -3,12 +3,13 @@
    buildDateOptions, showMinutesError, onLogSubmit). Strength is a muscle day (effort hidden), light
    is logged but not counted, 65 and over can log balance work. `status` is the text under the
    button (the parent also writes the Clear sample notice there). The panel hides while the age
-   step is open. */
+   step is open. The GPX drop zone (#gpx-drop) follows the form. */
 import { ref, computed, watch, nextTick } from 'vue';
 import { useDataStore } from '../stores/data.js';
 import { useUiStore } from '../stores/ui.js';
 import { WD, MON, addDays, dayIndex, ymd, weekStart } from '../core/dates.js';
 import { BALANCE_TYPES, isBalance, countsAsBalance } from '../core/rules.js';
+import GpxDrop from './GpxDrop.vue';
 
 /* [value, label, the option it goes before]; only for groups that track balance days (65+) */
 const BALANCE_OPTIONS = [['balance', 'Balance or tai chi', 'swim'], ['dance', 'Dance', 'sport']];
@@ -177,6 +178,6 @@ defineExpose({ focusActivity });
       <button class="btn btn-accent btn-block" id="log-submit" type="submit">Log it</button>
       <p class="status log-status" id="log-status" role="status" aria-live="polite">{{ status }}</p>
     </form>
-    <!-- Task 10: the #gpx-drop zone (label, #gpx-pick-log "Import GPX" button and help text) goes here, after the form -->
+    <GpxDrop />
   </section>
 </template>
