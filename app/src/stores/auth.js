@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js';
 import { createStore } from '../sync/store.js';
 import { createBackend, httpError } from '../sync/backend.js';
 import { useDataStore } from './data.js';
+import { readTheme, applyTheme } from './ui.js';
 import { COPY, SAVING, norm, validateRegister } from '../auth/copy.js';
 
 const FLUSH_LIMIT_MS = 3000;
@@ -36,12 +37,7 @@ function isNetworkAuthError(error) {
 }
 
 /* the auth screens follow the theme picked inside the app (stored in this browser) */
-function applyStoredTheme() {
-  try {
-    const v = JSON.parse(localStorage.getItem('w150.theme') || '"auto"');
-    if (v === 'light' || v === 'dark') document.documentElement.setAttribute('data-theme', v);
-  } catch (e) { /* storage blocked: follow the system */ }
-}
+function applyStoredTheme() { applyTheme(readTheme()); }
 
 function readEnv() {
   try { return import.meta.env || {}; } catch (e) { return {}; }
