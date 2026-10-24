@@ -95,3 +95,12 @@ test('the first route drops an auth link hash that has no route of its own', asy
   await router.push('/log#access_token=x&type=magiclink');
   expect(router.currentRoute.value.fullPath).toBe('/log');
 });
+
+test('page titles come from route meta, default Weekly 150', async () => {
+  const { router, auth } = setup();
+  auth.user = { id: 'u1' };
+  await router.push('/log');
+  expect(document.title).toBe('Full log, Weekly 150');
+  await router.push('/');
+  expect(document.title).toBe('Weekly 150');
+});

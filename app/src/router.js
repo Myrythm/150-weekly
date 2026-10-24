@@ -27,6 +27,8 @@ import CheckEmailPage from './pages/auth/CheckEmailPage.vue';
 import ForgotPage from './pages/auth/ForgotPage.vue';
 import ResetPage from './pages/auth/ResetPage.vue';
 
+const DEFAULT_TITLE = 'Weekly 150';
+
 function nextQuery(to) {
   return to.fullPath && to.fullPath !== '/' ? { next: to.fullPath } : {};
 }
@@ -37,7 +39,7 @@ export function createAppRouter(pinia, opts) {
 
   const routes = [
     { path: '/', name: 'week', component: PlaceholderPage, meta: { auth: true } },
-    { path: '/log', name: 'log', component: LogPage, meta: { auth: true } },
+    { path: '/log', name: 'log', component: LogPage, meta: { auth: true, title: 'Full log, Weekly 150' } },
     { path: '/activity/:id', name: 'activity', component: PlaceholderPage, meta: { auth: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { guest: true } },
     { path: '/register', name: 'register', component: RegisterPage, meta: { guest: true } },
@@ -84,6 +86,9 @@ export function createAppRouter(pinia, opts) {
     auth.setMsg('');
     router.replace({ name: 'reset' });
   });
+
+  /* the title of a page comes from route meta.title; a page that needs a dynamic title sets it itself after this runs */
+  router.afterEach(function (to) { document.title = to.meta.title || DEFAULT_TITLE; });
 
   return router;
 }
