@@ -20,6 +20,7 @@ import { useAuthStore } from './stores/auth.js';
 import { COPY } from './auth/copy.js';
 import { cleanLocation, safeNext } from './auth/link.js';
 import PlaceholderPage from './pages/PlaceholderPage.vue';
+import LogPage from './pages/LogPage.vue';
 import LoginPage from './pages/auth/LoginPage.vue';
 import RegisterPage from './pages/auth/RegisterPage.vue';
 import CheckEmailPage from './pages/auth/CheckEmailPage.vue';
@@ -36,7 +37,7 @@ export function createAppRouter(pinia, opts) {
 
   const routes = [
     { path: '/', name: 'week', component: PlaceholderPage, meta: { auth: true } },
-    { path: '/log', name: 'log', component: PlaceholderPage, meta: { auth: true } },
+    { path: '/log', name: 'log', component: LogPage, meta: { auth: true } },
     { path: '/activity/:id', name: 'activity', component: PlaceholderPage, meta: { auth: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { guest: true } },
     { path: '/register', name: 'register', component: RegisterPage, meta: { guest: true } },
