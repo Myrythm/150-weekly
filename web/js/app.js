@@ -6,6 +6,8 @@
  *   W150App.reload()         re-read every key from the store and re-render (remote change)
  *   W150App.setSyncStatus(s) 'saving' | 'saved' | 'error', wired to the store's onStatus
  * The global GPX comes from js/gpx-lib.js. The code below keeps the Artifact's order and text.
+ * Three documents load this script; <body data-page> picks what runs: 'week' (index.html),
+ * 'log' (log.html, every week) and 'activity' (activity.html?id=..., one GPX activity).
  */
 window.W150App = {
   setSyncStatus: function (state) {
@@ -80,7 +82,6 @@ window.W150App = {
         muscleHelp: 'WHO also suggests vigorous activity and muscle- and bone-strengthening on 3 or more days a week. Running, jumping and sport help build bone.',
         met: 'Target met. Anything extra still counts, so keep playing.',
         zero: 'One active game or a walk to school today is a real start.',
-        sit: { p1: "WHO's 2020 guideline says children and teenagers should limit the time they spend sitting, particularly recreational screen time.", p2: 'Getting up and moving between stretches of sitting or screens is an easy habit to build. Try it a few times a day.' },
         lastDay: 'A long game outside, a bike ride or a sports session would do it.',
         footer: 'For ages 5 to 17, Weekly 150 follows the WHO guideline: an average of 60 minutes a day of moderate to vigorous activity, plus vigorous activity and muscle- and bone-strengthening on 3 or more days a week.',
         fact: { stat: '60 min a day', claim: "WHO's 2020 guideline for children and adolescents aged 5 to 17 is an average of 60 minutes a day of moderate to vigorous activity, with vigorous activity and muscle- and bone-strengthening on 3 or more days a week." }
@@ -99,7 +100,6 @@ window.W150App = {
         muscleHelp: 'WHO also suggests muscle work on 2 or more days a week.',
         met: 'Target met. Anything extra still counts: more activity brings more benefit, up to 300 minutes and beyond.',
         zero: 'One 10-minute walk today is a real start.',
-        sit: { p1: "WHO's 2020 guideline says to limit the time you spend sitting, and to swap some of it for movement of any intensity, including light movement. Replacing sitting time with activity brings health benefits.", p2: 'If you sit a lot, WHO says to aim for more than the recommended moderate to vigorous minutes, which helps reduce the harm of long hours of sitting.' },
         lastDay: '',
         footer: 'Weekly 150 follows the WHO guideline for adults: at least 150 minutes of moderate activity a week, or 75 of vigorous, plus muscle work on 2 or more days.',
         fact: null
@@ -118,7 +118,6 @@ window.W150App = {
         muscleHelp: 'WHO also suggests muscle work on 2 or more days a week, and balance and strength activity at moderate effort or more on 3 or more days to help prevent falls.',
         met: 'Target met. Anything extra still counts: more activity brings more benefit, up to 300 minutes and beyond.',
         zero: 'One 10-minute walk today is a real start.',
-        sit: { p1: "WHO's 2020 guideline says to limit the time you spend sitting, and to swap some of it for movement of any intensity, including light movement. Replacing sitting time with activity brings health benefits.", p2: 'If you sit a lot, WHO says to aim for more than the recommended moderate to vigorous minutes, which helps reduce the harm of long hours of sitting.' },
         lastDay: '',
         balanceHelp: 'Moves that test your balance, like tai chi, dancing or standing on one leg, help prevent falls. Count sessions at moderate effort or more.',
         footer: 'For ages 65 and over, Weekly 150 follows the WHO guideline: the adult target of at least 150 minutes of moderate activity a week, or 75 of vigorous, plus muscle work on 2 or more days and balance and strength activity at moderate effort or more on 3 or more days to help prevent falls.',
@@ -134,10 +133,9 @@ window.W150App = {
     under5Lead: 'Young children need plenty of active play. WHO has a separate guide for under-5s that covers movement, sleep and screen time.',
     footer: 'Weekly 150 follows the WHO 2020 guideline: for adults, at least 150 minutes of moderate activity a week, or 75 of vigorous, plus muscle work on 2 or more days. Children aged 5 to 17 and adults 65 and over have their own targets, set from your age.'
   };
+  /* the server keeps every session; GPX imports can be dated up to 5 years back */
+  const GPX_KEEP_DAYS = 5 * 365 + 1, HISTORY_PAGE_WEEKS = 8;
   const SAMPLE_PLAN = { after: 'pour my morning coffee', will: 'do 10 squats', where: 'the kitchen counter', minutes: 2 };
-  /* sample move breaks by days back from today (0 = today), shown only while the sample is active and never stored */
-  const SAMPLE_BREAKS = [4, 3, 5, 0, 2, 6, 3];
-  const BREAK_KEEP_DAYS = 30, BREAK_MAX = 99, NUDGE_MS = 30 * 60 * 1000;
   const PLAN_CHIPS = {
     after: ['pour my morning coffee', 'park the car', 'close my laptop', 'brush my teeth'],
     will: ['do 10 squats', 'walk around the block', 'climb the stairs twice', 'hold a 30 second plank'],
@@ -172,6 +170,9 @@ window.W150App = {
 
 
   const $ = function (id) { return document.getElementById(id); };
+  /* which document this is: 'week' (index.html), 'log' (log.html, the full log) or 'activity' (activity.html, one GPX activity) */
+  const PAGE = document.body.getAttribute('data-page') || 'week';
+  function activityHref(id, from) { return '/activity?id=' + encodeURIComponent(id) + '&from=' + from; }
   function reduced() { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
 
   /* ===== storage helpers: data goes through the injected store, only the theme uses localStorage (in try/catch) ===== */
@@ -233,8 +234,7 @@ window.W150App = {
   let meta = { v: 1, seeded: true, sampleActive: false };
   let sessions = [];
   let plan = null;
-  let prefs = { sound: false, age: null, nudge: false };   /* age: whole years 0 to 120, or null until asked; nudge: the 30 minute sitting nudge */
-  let breaks = {};                            /* move breaks per day: { 'YYYY-MM-DD': count }, last 30 days only */
+  let prefs = { sound: false, age: null, nudge: false };   /* age: whole years 0 to 120, or null until asked; nudge: kept for older saves, the sitting nudge is gone */
   let askingAge = false;                      /* true while the user reopened the age step with Change age */
   let tracks = {};                            /* imported GPX details by trackId (w150.tracks), loaded at init */
 
@@ -292,20 +292,6 @@ window.W150App = {
   function sanitizeAge(a) {
     return (typeof a === 'number' && Number.isInteger(a) && a >= 0 && a <= 120) ? a : null;
   }
-  function sanitizeBreaks(b) {
-    const out = {};
-    if (!b || typeof b !== 'object' || Array.isArray(b)) return out;
-    const cutoff = ymd(addDays(today(), -BREAK_KEEP_DAYS));
-    Object.keys(b).forEach(function (k) {
-      const n = b[k];
-      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && k >= cutoff && Number.isInteger(n) && n >= 1) out[k] = Math.min(n, BREAK_MAX);
-    });
-    return out;
-  }
-  function saveBreaks() {
-    breaks = sanitizeBreaks(breaks);
-    if (storageOk) save(KEYS.breaks, breaks);
-  }
   function sanitizePlan(p) {
     if (!p || typeof p !== 'object') return null;
     const a = String(p.after || '').trim().slice(0, 60), w = String(p.will || '').trim().slice(0, 60), l = String(p.where || '').trim().slice(0, 60);
@@ -315,8 +301,6 @@ window.W150App = {
   }
 
   function persist() {
-    const cutoff = ymd(addDays(today(), -120));
-    sessions = sessions.filter(function (s) { return s.date >= cutoff; });
     if (!storageOk) return false;
     const a = save(KEYS.meta, meta), b = save(KEYS.sessions, sessions), c = save(KEYS.plan, plan), d = save(KEYS.prefs, prefs);
     return a && b && c && d;
@@ -337,7 +321,6 @@ window.W150App = {
     prefs = Object.assign({ sound: false, age: null, nudge: false }, (storageOk ? load(KEYS.prefs, null) : null) || {});
     prefs.sound = !!prefs.sound;
     prefs.nudge = prefs.nudge === true;
-    breaks = sanitizeBreaks(storageOk ? load(KEYS.breaks, null) : null);
     prefs.age = sanitizeAge(prefs.age);
     if (m && typeof m === 'object') {
       meta = { v: 1, seeded: true, sampleActive: !!m.sampleActive };
@@ -629,9 +612,6 @@ window.W150App = {
     $('strength').title = g.copy.muscleHelp;
     $('footer-guide').textContent = covered ? g.copy.footer : GUIDE_NOTE.footer;
     $('streak-intro').textContent = 'One square per day. Darker means more aerobic minutes; a ringed square is a strength-only day and a dotted square is a light-only day. ' + (u5 ? '' : 'A flag marks every week you reached ' + c.target + '. ') + 'Missed days happen; the week is what counts.';
-    $('sit-p1').textContent = g.copy.sit.p1;
-    $('sit-p2').textContent = g.copy.sit.p2;
-    $('sit-light-note').textContent = 'It shows in your log but does not count toward your ' + g.aerobic + ' minutes.';
     $('tile-weeks-label').textContent = 'Weeks at ' + c.target;
     $('legend-hit').textContent = 'Hit ' + c.target;
     $('legend-hit').hidden = u5;
@@ -711,28 +691,30 @@ window.W150App = {
 
   /* ===== render: splits ===== */
   let lastRemoved = null, lastRemovedTrack = null, undoTimer = 0;
+  /* one results row; idp '' for this week's table, 'hist-' for the full log (which names the full date for screen readers) */
+  function splitRow(s, c, idp) {
+    const d = parseYmd(s.date), di = dayIndex(d);
+    const label = actLabel(s), muscle = isStrength(s), light = isLight(s);
+    const bal = c.guide.balanceDays > 0 && countsAsBalance(s);
+    const gpx = s.source === 'gpx';
+    const when = idp ? WD_LONG[di] + ' ' + d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear() : WD_LONG[di];
+    const actCell = h('td', { class: 'c-act', role: 'cell' }, label, gpx ? [' ', h('span', { class: 'tag tag-neutral', title: 'Imported from a GPX file', text: 'GPX' })] : null, s.sample ? [' ', h('span', { class: 'tag tag-sample', text: 'Sample' })] : null, bal ? [' ', h('span', { class: 'tag tag-neutral', text: 'Balance' })] : null);
+    return h('tr', { role: 'row', 'data-id': s.id, class: s.sample ? 'is-sample' : '' },
+      h('td', { class: 'c-day', role: 'cell', text: WD[di] + ' ' + d.getDate() }),
+      actCell,
+      h('td', { class: 'c-min num', role: 'cell', text: String(s.minutes) }),
+      h('td', { class: 'c-eff', role: 'cell' }, muscle ? [h('span', { class: 'muted', 'aria-hidden': 'true', text: '-' }), h('span', { class: 'sr-only', text: 'Not applicable' })] : h('span', { class: 'tag ' + (s.intensity === 'vigorous' ? 'tag-vig' : light ? 'tag-neutral' : 'tag-mod'), text: s.intensity })),
+      h('td', { class: 'c-counts num' + (muscle ? ' is-muscle' : light ? ' is-light' : ''), role: 'cell', text: muscle ? 'Muscle day' : light ? 'Not counted' : String(credit(s)) }),
+      h('td', { class: 'c-rm', role: 'cell' }, h('span', { class: 'c-btns' },
+        gpx ? h('a', { class: 'btn-text', href: activityHref(s.id, idp ? 'log' : 'week'), id: idp + 'details-' + s.id, 'aria-label': 'Details for ' + label + ', ' + when, text: 'Details' }) : null,
+        h('button', { class: 'btn-text', type: 'button', id: idp + 'remove-' + s.id, 'data-remove': s.id, 'aria-label': 'Remove ' + label + ', ' + s.minutes + ' minutes, ' + when, text: 'Remove' })))
+    );
+  }
   function renderSplits(c) {
     const body = $('splits-body');
     body.replaceChildren();
     const rows = c.cur.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt - b.createdAt; });
-    rows.forEach(function (s) {
-      const d = parseYmd(s.date), di = dayIndex(d);
-      const label = actLabel(s), muscle = isStrength(s), light = isLight(s);
-      const bal = c.guide.balanceDays > 0 && countsAsBalance(s);
-      const gpx = s.source === 'gpx';
-      const actCell = h('td', { class: 'c-act', role: 'cell' }, label, gpx ? [' ', h('span', { class: 'tag tag-neutral', title: 'Imported from a GPX file', text: 'GPX' })] : null, s.sample ? [' ', h('span', { class: 'tag tag-sample', text: 'Sample' })] : null, bal ? [' ', h('span', { class: 'tag tag-neutral', text: 'Balance' })] : null);
-      const tr = h('tr', { role: 'row', 'data-id': s.id, class: s.sample ? 'is-sample' : '' },
-        h('td', { class: 'c-day', role: 'cell', text: WD[di] + ' ' + d.getDate() }),
-        actCell,
-        h('td', { class: 'c-min num', role: 'cell', text: String(s.minutes) }),
-        h('td', { class: 'c-eff', role: 'cell' }, muscle ? [h('span', { class: 'muted', 'aria-hidden': 'true', text: '-' }), h('span', { class: 'sr-only', text: 'Not applicable' })] : h('span', { class: 'tag ' + (s.intensity === 'vigorous' ? 'tag-vig' : light ? 'tag-neutral' : 'tag-mod'), text: s.intensity })),
-        h('td', { class: 'c-counts num' + (muscle ? ' is-muscle' : light ? ' is-light' : ''), role: 'cell', text: muscle ? 'Muscle day' : light ? 'Not counted' : String(credit(s)) }),
-        h('td', { class: 'c-rm', role: 'cell' }, h('span', { class: 'c-btns' },
-          gpx ? h('button', { class: 'btn-text', type: 'button', id: 'details-' + s.id, 'data-details': s.id, 'aria-label': 'Details for ' + label + ', ' + WD_LONG[di], text: 'Details' }) : null,
-          h('button', { class: 'btn-text', type: 'button', id: 'remove-' + s.id, 'data-remove': s.id, 'aria-label': 'Remove ' + label + ', ' + s.minutes + ' minutes, ' + WD_LONG[di], text: 'Remove' })))
-      );
-      body.append(tr);
-    });
+    rows.forEach(function (s) { body.append(splitRow(s, c, '')); });
     renderEarlier(c);
     $('splits-total').textContent = String(c.total);
     $('splits-table').hidden = rows.length === 0;
@@ -744,7 +726,9 @@ window.W150App = {
       : 'Strength work counts toward muscle days, not minutes. The week total is aerobic minutes only.';
   }
 
-  function hideUndo() { clearTimeout(undoTimer); $('undo-bar').hidden = true; lastRemoved = null; lastRemovedTrack = null; }
+  /* the week page and the full log page each have their own Undo bar */
+  const UNDO = PAGE === 'log' ? { bar: 'history-undo-bar', text: 'history-undo-text', btn: 'history-undo', idp: 'hist-' } : { bar: 'undo-bar', text: 'undo-text', btn: 'undo-btn', idp: '' };
+  function hideUndo() { clearTimeout(undoTimer); $(UNDO.bar).hidden = true; lastRemoved = null; lastRemovedTrack = null; }
   function removeSession(id) {
     const i = sessions.findIndex(function (s) { return s.id === id; });
     if (i < 0) return;
@@ -753,14 +737,13 @@ window.W150App = {
     /* an imported session takes its stored route with it; Undo puts both back */
     lastRemovedTrack = (s.trackId && tracks[s.trackId]) ? { id: s.trackId, rec: tracks[s.trackId] } : null;
     if (lastRemovedTrack) { delete tracks[s.trackId]; saveTracks(); }
-    if (DETAIL.id === s.id) closeDetail(false);
     persist();
     renderAll();
-    $('undo-text').textContent = 'Removed ' + actLabel(s) + ', ' + s.minutes + ' min.';
-    $('undo-bar').hidden = false;
+    $(UNDO.text).textContent = 'Removed ' + actLabel(s) + ', ' + s.minutes + ' min' + (PAGE === 'log' ? ', ' + fmtDay(s.date) : '') + '.';
+    $(UNDO.bar).hidden = false;
     clearTimeout(undoTimer);
     undoTimer = setTimeout(hideUndo, 6000);
-    $('undo-btn').focus();
+    $(UNDO.btn).focus();
   }
   function undoRemove() {
     if (!lastRemoved) return;
@@ -770,7 +753,7 @@ window.W150App = {
     if (tr) { tracks[tr.id] = tr.rec; saveTracks(); }
     hideUndo();
     renderAll();
-    const btn = document.getElementById('remove-' + s.id);
+    const btn = document.getElementById(UNDO.idp + 'remove-' + s.id);
     if (btn) btn.focus();
   }
 
@@ -1238,13 +1221,8 @@ window.W150App = {
     stopInterval();
     const keepAge = prefs.age;
     sessions = []; plan = null; prefs = { sound: false, age: keepAge, nudge: false }; askingAge = false;
-    breaks = {};
     tracks = {};
     resetGpxImport();
-    closeDetail(false);
-    SIT.nudged = false; SIT.lastAt = Date.now(); SIT.since = 'you opened this page';
-    hideBreakUndo();
-    $('sit-nudge').checked = false;
     meta = { v: 1, seeded: true, sampleActive: false };
     [KEYS.meta, KEYS.sessions, KEYS.plan, KEYS.prefs, KEYS.breaks, KEYS.tracks].forEach(removeKey);
     save(KEYS.meta, meta);
@@ -1264,104 +1242,6 @@ window.W150App = {
     renderAll();
     /* the auth layer flushes the queued deletes; everything above is already on screen */
     if (typeof ctx.onClearAll === 'function') { try { await ctx.onClearAll(); } catch (e) { /* the sync status shows the failure */ } }
-  }
-
-  /* ===== sit less: move breaks, 7 day record, optional 30 minute nudge ===== */
-  /* Breaks are not sessions: they never touch sessions[], credit() or any minute total. lastAt/since live in memory only. */
-  const SIT = { lastAt: Date.now(), since: 'you opened this page', nudged: false, undo: null, undoTimer: 0 };
-  function sitVisible() { return currentGroup() !== 'under5'; }
-  /* real count for a date, or the made-up sample count while the sample is active */
-  function breakCount(d) {
-    if (meta.sampleActive) {
-      const back = Math.round((today() - d) / 86400000);
-      return (back >= 0 && back < SAMPLE_BREAKS.length) ? SAMPLE_BREAKS[back] : 0;
-    }
-    return breaks[ymd(d)] || 0;
-  }
-  function renderSit(c) {
-    const show = sitVisible();
-    $('sitless').hidden = !show;
-    $('nav-sitless').hidden = !show;
-    if (!show) { $('sit-nudge-msg').hidden = true; return; }
-    const n = breakCount(c.today), sample = meta.sampleActive;
-    $('sit-card').classList.toggle('is-sample', sample);
-    $('sit-sample-tag').hidden = !sample;
-    $('sit-count').textContent = String(n);
-    const marks = $('sit-marks');
-    marks.replaceChildren();
-    if (n === 0) marks.append(h('span', { class: 'small muted', text: 'None yet today.' }));
-    else {
-      for (let i = 0; i < Math.min(n, 12); i++) marks.append(h('i'));
-      if (n > 12) marks.append(h('span', { class: 'small muted', text: '+' + (n - 12) }));
-    }
-    const days = $('sit-days');
-    days.replaceChildren();
-    let on = 0;
-    for (let i = 6; i >= 0; i--) {
-      const d = addDays(c.today, -i), has = breakCount(d) > 0;
-      if (has) on++;
-      days.append(h('span', { class: 'plan-day' + (has ? ' on' : '') + (i === 0 ? ' today' : '') }, h('i'), h('span', { text: WD[dayIndex(d)].charAt(0) })));
-    }
-    $('sit-caption').textContent = 'Moved on ' + on + ' of the last 7 days';
-    $('sit-break').setAttribute('aria-label', 'I got up and moved. ' + n + ' ' + plural(n, 'break', 'breaks') + ' today.');
-    renderNudge();
-  }
-  function hideBreakUndo() { clearTimeout(SIT.undoTimer); SIT.undo = null; const b = $('sit-undo-bar'); if (b) b.hidden = true; }
-  function addBreak() {
-    if (!sitVisible()) return;
-    const ds = ymd(today());
-    if (meta.sampleActive) clearSample();
-    const prev = breaks[ds] || 0;
-    if (prev >= BREAK_MAX) return;
-    breaks[ds] = prev + 1;
-    SIT.undo = { date: ds, prev: prev, prevAt: SIT.lastAt, prevSince: SIT.since };
-    SIT.lastAt = Date.now(); SIT.since = 'your last break'; SIT.nudged = false;
-    saveBreaks();
-    renderAll();
-    const n = prev + 1;
-    $('sit-undo-text').textContent = 'Break ' + n + ' added today.';
-    $('sit-undo-bar').hidden = false;
-    clearTimeout(SIT.undoTimer);
-    SIT.undoTimer = setTimeout(hideBreakUndo, 6000);
-    announce(n + ' ' + plural(n, 'break', 'breaks') + ' today.');
-  }
-  function undoBreak() {
-    const u = SIT.undo;
-    if (!u) return;
-    if (u.prev > 0) breaks[u.date] = u.prev; else delete breaks[u.date];
-    SIT.lastAt = u.prevAt; SIT.since = u.prevSince; SIT.nudged = false;
-    hideBreakUndo();
-    saveBreaks();
-    renderAll();
-    $('sit-break').focus();
-  }
-  function renderNudge() {
-    const box = $('sit-nudge-msg');
-    const show = prefs.nudge && SIT.nudged && sitVisible();
-    box.hidden = !show;
-    if (!show) return;
-    const mins = Math.max(1, Math.round((Date.now() - SIT.lastAt) / 60000));
-    $('sit-nudge-text').textContent = 'It has been about ' + mins + ' minutes since ' + SIT.since + '. Stand up, stretch, walk to the window.';
-  }
-  /* timestamp check, not a timer chain: runs on a light interval and when the tab becomes visible again; paused while the tab is hidden */
-  function checkNudge() {
-    if (!prefs.nudge || SIT.nudged || document.hidden || !sitVisible()) return;
-    if (Date.now() - SIT.lastAt < NUDGE_MS) return;
-    SIT.nudged = true;
-    renderNudge();
-    beep(2);
-  }
-  function snoozeNudge() {
-    SIT.nudged = false; SIT.lastAt = Date.now(); SIT.since = 'you chose Not now';
-    renderNudge();
-    $('sit-break').focus();
-  }
-  function onNudgeToggle(ev) {
-    prefs.nudge = ev.target.checked;
-    SIT.nudged = false; SIT.lastAt = Date.now(); SIT.since = 'you turned the nudge on';
-    if (prefs.nudge && prefs.sound) ensureAudio();
-    persist();
-    renderNudge();
   }
 
   /* ===== GPX import: effort, storage, review card, detail view =====
@@ -1450,7 +1330,7 @@ window.W150App = {
     });
     return out;
   }
-  /* drop route details no session points to (removed, or past the 120 day window) */
+  /* drop route details no session points to (removed sessions) */
   function pruneTracks() {
     const ref = {};
     sessions.forEach(function (s) { if (s.trackId) ref[s.trackId] = true; });
@@ -1551,11 +1431,12 @@ window.W150App = {
     GQ.pending = []; GQ.item = null; GQ.reading = false; GQ.total = 0; GQ.index = 0; GQ.saved = []; GQ.errors = [];
     renderGpxErrors(); setGpxStatus('');
     $('gpx-review').hidden = true;
+    $('gpx-last').hidden = true;
   }
   function enqueueFiles(fileList, trigger) {
     const files = Array.prototype.slice.call(fileList || []);
     if (!files.length) return;
-    if (!GQ.item && !GQ.reading && !GQ.pending.length) { GQ.total = 0; GQ.index = 0; GQ.saved = []; GQ.errors = []; renderGpxErrors(); setGpxStatus(''); }
+    if (!GQ.item && !GQ.reading && !GQ.pending.length) { GQ.total = 0; GQ.index = 0; GQ.saved = []; GQ.errors = []; renderGpxErrors(); setGpxStatus(''); $('gpx-last').hidden = true; }
     if (trigger) GQ.trigger = trigger;
     GQ.total += files.length;
     files.forEach(function (f) { GQ.pending.push(f); });
@@ -1591,7 +1472,7 @@ window.W150App = {
     if (!it.cache[lt]) it.cache[lt] = GPX.analyze(it.text, gpxOpts(lt));
     return it.cache[lt];
   }
-  function gpxDateRange() { const t = today(); return { min: ymd(addDays(t, -120)), max: ymd(t) }; }
+  function gpxDateRange() { const t = today(); return { min: ymd(addDays(t, -GPX_KEEP_DAYS)), max: ymd(t) }; }
   function findDuplicate(r) {
     const st = r.info.startTime, d = r.metrics.distanceM;
     if (!isNum(st)) return null;
@@ -1612,7 +1493,7 @@ window.W150App = {
     const rg = gpxDateRange();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'Pick a date.';
     if (v > rg.max) return 'Pick a date up to today.';
-    if (v < rg.min) return 'This is from ' + fmtDay(v) + ' ' + v.slice(0, 4) + '. The log keeps the last 120 days, so pick a newer date or skip this file.';
+    if (v < rg.min) return 'This is from ' + fmtDay(v) + ' ' + v.slice(0, 4) + '. Imports go back 5 years, so pick a newer date or skip this file.';
     return '';
   }
   function showReview(first) {
@@ -1704,13 +1585,18 @@ window.W150App = {
     setGpxStatus('Skipped ' + it.name + '.');
     if (GQ.pending.length) nextGpxFile(); else finishGpxBatch();
   }
-  /* end of a batch: open the last saved activity, or send focus back to the control that started it */
+  /* end of a batch: offer a link to the last saved activity's page, or send focus back to the control that started it */
   function finishGpxBatch() {
     $('gpx-review').hidden = true;
     if (GQ.total > 1) setGpxStatus((GQ.saved.length ? 'Imported ' + GQ.saved.length + ' of ' + GQ.total + ' files.' : 'No files imported.') + (GQ.errors.length ? ' The problems are listed above.' : ''));
     const last = GQ.saved.length ? GQ.saved[GQ.saved.length - 1] : null;
     GQ.saved = [];
-    if (last && sessions.some(function (s) { return s.id === last; })) { openDetail(last); return; }
+    if (last && sessions.some(function (s) { return s.id === last; })) {
+      $('gpx-last-link').href = activityHref(last, 'week');
+      $('gpx-last').hidden = false;
+      $('gpx-last-link').focus();
+      return;
+    }
     const t = $(GQ.trigger);
     (t && t.offsetParent !== null ? t : $('gpx-pick-splits')).focus();
   }
@@ -1739,8 +1625,91 @@ window.W150App = {
       ul.append(h('li', null,
         h('span', { class: 'earlier-day', text: fmtDay(s.date) }),
         h('span', { class: 'earlier-what', text: TYPE_LABEL[s.type] + ', ' + GPX.fmtDistance(rec.metrics.distanceM) + ', ' + s.minutes + ' min' + (rec.name ? ', ' + rec.name : '') }),
-        h('button', { class: 'btn-text', type: 'button', id: 'earlier-' + s.id, 'data-details': s.id, 'aria-label': 'Details for ' + TYPE_LABEL[s.type] + ', ' + fmtDay(s.date), text: 'Details' })));
+        h('a', { class: 'btn-text', href: activityHref(s.id, 'week'), id: 'earlier-' + s.id, 'aria-label': 'Details for ' + TYPE_LABEL[s.type] + ', ' + fmtDay(s.date), text: 'Details' })));
     });
+  }
+
+  /* ===== full log: every session, grouped by week, newest week first ===== */
+  /* log.html (PAGE 'log'); the week page links to it */
+  const HIST = { shown: HISTORY_PAGE_WEEKS, period: 'all' };
+  function fmtWeekRange(ws) {
+    const we = addDays(ws, 6);
+    if (ws.getFullYear() !== we.getFullYear()) return ws.getDate() + ' ' + MON[ws.getMonth()] + ' ' + ws.getFullYear() + ' to ' + we.getDate() + ' ' + MON[we.getMonth()] + ' ' + we.getFullYear();
+    if (ws.getMonth() !== we.getMonth()) return ws.getDate() + ' ' + MON[ws.getMonth()] + ' to ' + we.getDate() + ' ' + MON[we.getMonth()] + ' ' + we.getFullYear();
+    return ws.getDate() + ' to ' + we.getDate() + ' ' + MON[we.getMonth()] + ' ' + we.getFullYear();
+  }
+  function renderHistory(c) {
+    const u5 = c.group === 'under5';
+    /* period choices: all time plus every year that has a session */
+    const years = Array.from(new Set(sessions.map(function (s) { return s.date.slice(0, 4); }))).sort().reverse();
+    if (HIST.period !== 'all' && years.indexOf(HIST.period) < 0) HIST.period = 'all';
+    const sel = $('history-period');
+    sel.replaceChildren(new Option('All time', 'all'));
+    years.forEach(function (y) { sel.append(new Option(y, y)); });
+    sel.value = HIST.period;
+
+    const list = sessions.filter(function (s) { return HIST.period === 'all' || s.date.slice(0, 4) === HIST.period; });
+    const byWeek = {};
+    list.forEach(function (s) { const k = ymd(weekStart(parseYmd(s.date))); (byWeek[k] = byWeek[k] || []).push(s); });
+    const weeks = Object.keys(byWeek).sort().reverse();
+    let hit = 0, minutes = 0;
+    list.forEach(function (s) { minutes += credit(s); });
+    /* a week's total always counts the whole week, even when the period cuts it at New Year */
+    const totals = {};
+    weeks.forEach(function (k) { totals[k] = weekCredit(parseYmd(k)).credit; if (totals[k] >= c.target) hit++; });
+
+    $('history-count').textContent = String(list.length);
+    $('history-count-unit').textContent = HIST.period === 'all' ? plural(list.length, 'session logged', 'sessions logged') : 'logged in ' + HIST.period;
+    $('history-minutes').textContent = String(minutes);
+    $('history-hit-tile').hidden = u5;
+    $('history-hit-label').textContent = 'Weeks at ' + c.target;
+    $('history-hit').textContent = String(hit);
+    $('history-hit-unit').textContent = 'of ' + weeks.length + ' ' + plural(weeks.length, 'week', 'weeks') + ' with a session';
+    $('history-intro').textContent = 'Every session you have logged, newest week first. ' + (u5 ? 'Each week shows its aerobic minutes.' : 'Each week shows its aerobic minutes against your ' + c.target + '.');
+
+    const box = $('history-list');
+    box.replaceChildren();
+    const curWs = ymd(c.ws), lastWs = ymd(addDays(c.ws, -7));
+    weeks.slice(0, HIST.shown).forEach(function (k) {
+      const ws = parseYmd(k), rows = byWeek[k].slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt - b.createdAt; });
+      const tot = totals[k], wHit = !u5 && tot >= c.target;
+      const muscleDays = new Set(sessions.filter(function (s) { return s.type === 'strength' && ymd(weekStart(parseYmd(s.date))) === k; }).map(function (s) { return s.date; })).size;
+      const title = (k === curWs ? 'This week, ' : k === lastWs ? 'Last week, ' : '') + fmtWeekRange(ws);
+      const sum = (u5 ? tot + ' aerobic min' : tot + ' of ' + c.target + ' aerobic min') + (muscleDays ? ', ' + muscleDays + ' ' + plural(muscleDays, 'muscle day', 'muscle days') : '');
+      const tbody = h('tbody', { role: 'rowgroup' });
+      rows.forEach(function (s) { tbody.append(splitRow(s, c, 'hist-')); });
+      box.append(h('section', { class: 'history-week', 'aria-labelledby': 'history-w-' + k },
+        h('div', { class: 'history-week-head' },
+          h('h3', { class: 'history-week-title', id: 'history-w-' + k, tabindex: '-1', text: title }),
+          h('p', { class: 'history-week-sum' }, h('span', { text: sum }), wHit ? h('span', { class: 'tag tag-mod', text: 'Hit ' + c.target }) : null)),
+        h('table', { class: 'splits', role: 'table' },
+          h('caption', { class: 'sr-only', text: 'Sessions, week of ' + fmtWeekRange(ws) }),
+          h('thead', { role: 'rowgroup' }, h('tr', { role: 'row' },
+            h('th', { role: 'columnheader', scope: 'col', text: 'Day' }),
+            h('th', { role: 'columnheader', scope: 'col', text: 'Activity' }),
+            h('th', { role: 'columnheader', scope: 'col', class: 'num', text: 'Min' }),
+            h('th', { role: 'columnheader', scope: 'col', text: 'Effort' }),
+            h('th', { role: 'columnheader', scope: 'col', class: 'num', text: 'Counts as' }),
+            h('th', { role: 'columnheader', scope: 'col' }, h('span', { class: 'sr-only', text: 'Remove' })))),
+          tbody)));
+    });
+    $('history-empty').hidden = weeks.length !== 0;
+    $('history-empty').textContent = sessions.length ? 'Nothing logged in ' + HIST.period + '.' : 'Nothing logged yet. Every session you log shows up here, grouped by week.';
+    const more = weeks.length - HIST.shown;
+    $('history-more').hidden = more <= 0;
+    $('history-more').textContent = 'Show older weeks (' + Math.max(0, more) + ' more)';
+  }
+  function showMoreHistory() {
+    const first = HIST.shown;
+    HIST.shown += HISTORY_PAGE_WEEKS;
+    renderHistory(calc());
+    const heads = document.querySelectorAll('#history-list .history-week-title');
+    if (heads[first]) heads[first].focus();
+  }
+  /* a section hash kept by auth.js (for example /#splits from the full log page) scrolls once the app is on screen */
+  function scrollToHash() {
+    const t = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
+    if (t && t.offsetParent !== null) { try { t.scrollIntoView({ block: 'start' }); } catch (e) { /* ignore */ } }
   }
 
   /* ----- detail view ----- */
@@ -1766,23 +1735,20 @@ window.W150App = {
     return Math.abs(arr[lo] - d) <= Math.abs(arr[hi] - d) ? lo : hi;
   }
 
-  function openDetail(id) {
-    const s = sessions.find(function (x) { return x.id === id; });
-    if (!s) return;
-    DETAIL.id = id; DETAIL.cursor = null;
-    $('gpx-detail').hidden = false;
+  /* activity.html: ?id= names the session, &from=week or log picks the back link */
+  function renderActivityPage() {
+    const q = new URLSearchParams(location.search);
+    const id = q.get('id') || '', fromWeek = q.get('from') === 'week';
+    $('activity-back').href = fromWeek ? '/#splits' : '/log';
+    $('activity-back').textContent = fromWeek ? 'Back to this week' : 'Back to the full log';
+    const found = sessions.some(function (x) { return x.id === id; });
+    $('gpx-detail').hidden = !found;
+    $('activity-missing').hidden = found;
+    if (!found) { DETAIL.id = null; DETAIL.charts = []; DETAIL.route = null; $('gpx-d-body').replaceChildren(); document.title = 'Activity not found, Weekly 150'; return; }
+    if (DETAIL.id !== id) DETAIL.cursor = null;
+    DETAIL.id = id;
     renderDetail();
-    try { $('gpx-detail').scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); } catch (e) { /* ignore */ }
-    $('gpx-d-title').focus({ preventScroll: true });
-  }
-  function closeDetail(focusBack) {
-    const id = DETAIL.id;
-    DETAIL.id = null; DETAIL.charts = []; DETAIL.route = null;
-    $('gpx-detail').hidden = true;
-    $('gpx-d-body').replaceChildren();
-    if (!focusBack) return;
-    const back = [id && 'details-' + id, id && 'earlier-' + id, GQ.trigger, 'gpx-pick-splits'].map(function (x) { return x && document.getElementById(x); }).find(function (el) { return el && el.offsetParent !== null; });
-    if (back) back.focus();
+    document.title = $('gpx-d-title').textContent + ', Weekly 150';
   }
   function statItem(label, value, unit, note) {
     return h('div', { class: 'stat' }, h('dt', { text: label }), h('dd', null, value, unit ? h('span', { class: 'u', text: unit }) : null, note ? h('span', { class: 'n', text: note }) : null));
@@ -2023,7 +1989,7 @@ window.W150App = {
   }
   function renderDetail() {
     const s = sessions.find(function (x) { return x.id === DETAIL.id; });
-    if (!s) { closeDetail(false); return; }
+    if (!s) return;
     const rec = getTrack(s), type = s.type, label = TYPE_LABEL[type];
     $('gpx-d-sample').hidden = !s.sample;
     $('gpx-d-title').textContent = (rec && rec.name) || label;
@@ -2089,24 +2055,47 @@ window.W150App = {
   function renderAll() {
     const c = calc();
     renderedDay = ymd(c.today);
+    if (PAGE === 'log') { renderHistory(c); return; }
+    if (PAGE === 'activity') { renderActivityPage(); return; }
     applyGuide(c);
     renderHero(c);
     renderSplits(c);
     renderGrid(c);
     renderPlan(c);
-    renderSit(c);
-    /* GPX: a detail view whose session is gone closes; an open import review follows a new age (heart rate method) */
-    if (DETAIL.id && !sessions.some(function (s) { return s.id === DETAIL.id; })) closeDetail(false);
+    /* an open import review follows a new age (heart rate method) */
     if (GQ.item) showReview(false);
   }
 
   /* ===== wiring ===== */
+  /* every page: theme, day rollover; then the page's own controls */
   function wire() {
     $('theme-toggle').addEventListener('click', function () {
       theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
       applyTheme();
       saveTheme(theme);
     });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') { checkDayRollover(); if (PAGE === 'week') tick(); }
+    });
+    setInterval(checkDayRollover, 60000);
+    if (PAGE === 'log') wireLog();
+    else if (PAGE === 'activity') wireActivity();
+    else wireWeek();
+  }
+  function wireLog() {
+    $('history-list').addEventListener('click', function (ev) {
+      const b = ev.target.closest('[data-remove]');
+      if (b) removeSession(b.getAttribute('data-remove'));
+    });
+    $('history-period').addEventListener('change', function (ev) { HIST.period = ev.target.value; HIST.shown = HISTORY_PAGE_WEEKS; renderHistory(calc()); });
+    $('history-more').addEventListener('click', showMoreHistory);
+    $('history-undo').addEventListener('click', undoRemove);
+  }
+  function wireActivity() {
+    let resizeT = 0;
+    window.addEventListener('resize', function () { clearTimeout(resizeT); resizeT = setTimeout(redrawDetailGraphics, 150); });
+  }
+  function wireWeek() {
     $('header-log').addEventListener('click', function (ev) {
       if (ageStepOpen()) { ev.preventDefault(); focusAgeInput(); return; }
       setTimeout(function () { $('log-activity').focus({ preventScroll: true }); }, 0);
@@ -2137,12 +2126,6 @@ window.W150App = {
     $('splits-body').addEventListener('click', function (ev) {
       const b = ev.target.closest('[data-remove]');
       if (b) removeSession(b.getAttribute('data-remove'));
-      const d = ev.target.closest('[data-details]');
-      if (d) openDetail(d.getAttribute('data-details'));
-    });
-    $('gpx-earlier-list').addEventListener('click', function (ev) {
-      const d = ev.target.closest('[data-details]');
-      if (d) openDetail(d.getAttribute('data-details'));
     });
 
     /* GPX import: two buttons share one file input; both controls also take dropped files */
@@ -2168,10 +2151,6 @@ window.W150App = {
     $('gpx-date').addEventListener('change', function (ev) { showFieldError('gpx-date', dateProblem(ev.target.value)); });
     ['gpx-int-light', 'gpx-int-mod', 'gpx-int-vig'].forEach(function (id) { $(id).addEventListener('change', function () { if (GQ.item) GQ.item.effortTouched = true; }); });
     $('gpx-set-age').addEventListener('click', function () { if (ageStepOpen()) focusAgeInput(); else openAgeStep(); });
-    $('gpx-d-close').addEventListener('click', function () { closeDetail(true); });
-    $('gpx-detail').addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { ev.preventDefault(); closeDetail(true); } });
-    let resizeT = 0;
-    window.addEventListener('resize', function () { clearTimeout(resizeT); resizeT = setTimeout(redrawDetailGraphics, 150); });
     $('undo-btn').addEventListener('click', undoRemove);
 
     $('plan-form').addEventListener('submit', onPlanSubmit);
@@ -2205,17 +2184,6 @@ window.W150App = {
       persist();
     });
 
-    $('sit-break').addEventListener('click', addBreak);
-    $('sit-nudge-move').addEventListener('click', function () { addBreak(); $('sit-break').focus(); });
-    $('sit-nudge-snooze').addEventListener('click', snoozeNudge);
-    $('sit-undo').addEventListener('click', undoBreak);
-    $('sit-nudge').checked = prefs.nudge;
-    $('sit-nudge').addEventListener('change', onNudgeToggle);
-    $('sit-log-link').addEventListener('click', function (ev) {
-      if (ageStepOpen()) { ev.preventDefault(); focusAgeInput(); return; }
-      setTimeout(function () { $('log-activity').focus({ preventScroll: true }); }, 0);
-    });
-
     $('clear-all').addEventListener('click', function () { $('clear-all').hidden = true; $('clear-confirm').hidden = false; $('clear-status').textContent = ''; $('clear-no').focus(); });
     $('clear-no').addEventListener('click', function () { $('clear-confirm').hidden = true; $('clear-all').hidden = false; $('clear-all').focus(); });
     $('clear-yes').addEventListener('click', function () {
@@ -2224,39 +2192,34 @@ window.W150App = {
       $('clear-status').textContent = 'All cleared.';
       $('clear-all').focus();
     });
-
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') { checkDayRollover(); tick(); checkNudge(); }
-    });
-    setInterval(checkDayRollover, 60000);
-    setInterval(checkNudge, 30000);
   }
   function checkDayRollover() {
-    if (ymd(today()) !== renderedDay) { buildDateOptions(); renderAll(); }
+    if (ymd(today()) !== renderedDay) { if (PAGE === 'week') buildDateOptions(); renderAll(); }
   }
 
   /* ===== init ===== */
   loadState();
-  if (prefs.age !== null) $('age-input').value = String(prefs.age);
-  buildDateOptions();
-  buildPlanChips();
-  renderRoutines();
-  renderTimer();
-  renderFooter();
+  if (PAGE === 'week') {
+    if (prefs.age !== null) $('age-input').value = String(prefs.age);
+    buildDateOptions();
+    buildPlanChips();
+    renderRoutines();
+    renderTimer();
+    renderFooter();
+  }
   applyTheme();
   wire();
   renderAll();
+  if (PAGE === 'week') scrollToHash();
 
   /* ===== account shell: header name, log out, reload after a remote change ===== */
   const displayName = (ctx.profile && ctx.profile.displayName) || '';
   $('who-name').textContent = displayName;
-  $('bib-name').textContent = displayName;
-  $('bib-name').hidden = !displayName;
+  if (PAGE === 'week') { $('bib-name').textContent = displayName; $('bib-name').hidden = !displayName; }
   $('logout').addEventListener('click', function () { if (typeof ctx.onLogout === 'function') ctx.onLogout(); });
   window.W150App.reload = function () {
     loadState();
-    $('age-input').value = prefs.age === null ? '' : String(prefs.age);
-    $('sit-nudge').checked = prefs.nudge;
+    if (PAGE === 'week') $('age-input').value = prefs.age === null ? '' : String(prefs.age);
     renderAll();
   };
   }
