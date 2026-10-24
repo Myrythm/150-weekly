@@ -613,7 +613,7 @@ img, svg { max-width: 100%; }
 .who { font-size: var(--fs-small); font-weight: 600; color: var(--fg); max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sync-status { color: var(--fg-muted); white-space: nowrap; }
 .sync-status[data-state="error"] { color: var(--accent); font-weight: 600; }
-/* the header also carries the save status, the name and Log out, so the inline nav moves out to 960px and the name shows from 1100px */
+/* the header also carries the save status, the name and Log out, so the inline nav moves out to 960px and the header name shows from 1100px (the race bib shows it at every width) */
 @media (max-width: 1099.98px) { .who { display: none; } }
 @media (min-width: 720px) and (max-width: 959.98px) { .nav { display: none; } .only-mobile { display: inline-flex; } }
 /* below 720px the header items cannot share one 56px row: brand and save status on the first row, actions on the second */
@@ -632,3 +632,30 @@ img, svg { max-width: 100%; }
   .header-inner { column-gap: var(--sp-1); }
   .header-actions .btn { font-size: 0.8125rem; padding-inline: 6px; }
 }
+
+/* ---------- display name on the race bib (every width) ---------- */
+.bib-name { padding-inline: 24px; padding-top: 14px; font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; line-height: 1.15; text-transform: uppercase; letter-spacing: 0.02em; color: var(--bib-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bib-name + .bib-number-row { padding-top: 6px; }
+
+/* ---------- auth screens (web version): an entry card on the track band ---------- */
+.auth { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; background: var(--track); }
+.auth .site-header { position: static; }
+.auth-band { flex: 1 0 auto; padding-block: var(--sp-6) var(--sp-7); }
+.auth-grid { display: grid; gap: var(--sp-5); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 960px) { .auth-grid { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); column-gap: var(--sp-7); padding-top: var(--sp-6); } }
+.auth-intro { min-width: 0; }
+.auth-intro > .label { color: var(--lane-line); }
+.auth-intro .h1 { color: var(--track-ink); margin-top: var(--sp-3); }
+@media (max-width: 639.98px) { .auth-intro .h1 { font-size: 2rem; } .auth-intro .lead { font-size: 1rem; margin-top: var(--sp-3); } }
+.auth-card { width: 100%; max-width: 480px; min-width: 0; padding: 0; overflow: hidden; border-radius: var(--r-bib); box-shadow: var(--shadow-bib); }
+.auth-strip { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); min-height: 36px; padding-inline: var(--sp-4); background: var(--accent); color: var(--accent-ink); }
+.auth-body { display: flex; flex-direction: column; gap: var(--sp-4); padding: var(--sp-4); }
+@media (min-width: 640px) { .auth-body { padding: var(--sp-5); } }
+.auth-screen { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.auth-screen > .h3 { margin-bottom: 0; }
+.auth-msg { border-left: 4px solid var(--track-fill); background: var(--surface-2); padding-block: var(--sp-2); padding-inline: var(--sp-3); font-size: var(--fs-small); font-weight: 600; overflow-wrap: anywhere; }
+.auth-msg:empty { display: none; }
+.auth-msg[data-tone="error"] { border-left-color: var(--accent); }
+.auth-msg[data-tone="ok"] { border-left-color: var(--ok); }
+.auth-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-1) var(--sp-3); margin-inline: -6px; }
+.auth .input { min-width: 0; }

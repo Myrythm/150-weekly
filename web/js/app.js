@@ -1,8 +1,8 @@
 /*
  * Weekly 150 web: the Artifact page script, wrapped so nothing runs at parse time.
  *   W150App.start({ store, profile: { username, displayName }, onLogout(), onClearAll() })
- *     once per page load, after the store is hydrated. All w150.* data goes through ctx.store;
- *     only the theme stays in localStorage.
+ *     once per page load, after the store is hydrated (a second call returns false and does
+ *     nothing). All w150.* data goes through ctx.store; only the theme stays in localStorage.
  *   W150App.reload()         re-read every key from the store and re-render (remote change)
  *   W150App.setSyncStatus(s) 'saving' | 'saved' | 'error', wired to the store's onStatus
  * The global GPX comes from js/gpx-lib.js. The code below keeps the Artifact's order and text.
@@ -15,8 +15,11 @@ window.W150App = {
     el.setAttribute('data-state', state || '');
   },
   reload: function () { /* replaced by start() */ },
+  started: false,
   start: function (ctx) {
   'use strict';
+  if (window.W150App.started) return false;
+  window.W150App.started = true;
   const store = ctx.store;
 
   /* ===== Evidence slots: a row renders only when stat, claim and url are all filled ===== */
@@ -1360,7 +1363,7 @@ window.W150App = {
   }
 
   /* ===== GPX import: effort, storage, review card, detail view =====
-     Parsing and metrics come from GPX (gpx-lib.js, pasted above). A saved import is a normal session (addSession, so credit(),
+     Parsing and metrics come from GPX (js/gpx-lib.js, loaded before this script). A saved import is a normal session (addSession, so credit(),
      light and strength rules, sample clearing, Undo and the grid all apply) with source 'gpx' and a trackId. Route details live
      under KEYS.tracks as { trackId: { name, type, startTime, metrics, track, classification, deviceNote, importedAt } }. */
   function isNum(x) { return typeof x === 'number' && isFinite(x); }
@@ -1664,7 +1667,7 @@ window.W150App = {
     let msg = past ? 'Saved to ' + fmtDay(s.date) + ': ' + what + '.' : 'Saved to your log: ' + what + '.';
     if (isLight(s)) msg += ' Light activity is logged but not counted toward your minutes.';
     else msg += past ? ' It counts toward that week.' : ' Counts as ' + credit(s) + ' toward this week.';
-    if (!stored) msg += ' The route did not fit in this browser\'s storage, so only the session was saved.';
+    if (!stored) msg += ' The route could not be kept with this import, so only the session was saved.';
     return msg;
   }
   function onGpxSave(ev) {
@@ -2031,7 +2034,7 @@ window.W150App = {
     $('gpx-d-hrnote').hidden = !(cl && cl.basis === 'hr');
     const miss = $('gpx-d-missing');
     miss.hidden = !!rec;
-    miss.textContent = rec ? '' : s.trackId ? 'The route for this session is no longer stored. This browser keeps the details of the ' + TRACK_CAP + ' most recent imports. The session stays in your log.' : 'The route for this session was not stored, because this browser ran out of storage space during the import. The session is in your log.';
+    miss.textContent = rec ? '' : s.trackId ? 'The route for this session is no longer stored. Your account keeps the details of the ' + TRACK_CAP + ' most recent imports. The session stays in your log.' : 'The route for this session was not stored with the import. The session is in your log.';
     $('gpx-d-device').hidden = !(rec && rec.deviceNote);
     $('gpx-d-device').textContent = (rec && rec.deviceNote) || '';
     const body = $('gpx-d-body');
@@ -2243,7 +2246,10 @@ window.W150App = {
   renderAll();
 
   /* ===== account shell: header name, log out, reload after a remote change ===== */
-  $('who-name').textContent = (ctx.profile && ctx.profile.displayName) || '';
+  const displayName = (ctx.profile && ctx.profile.displayName) || '';
+  $('who-name').textContent = displayName;
+  $('bib-name').textContent = displayName;
+  $('bib-name').hidden = !displayName;
   $('logout').addEventListener('click', function () { if (typeof ctx.onLogout === 'function') ctx.onLogout(); });
   window.W150App.reload = function () {
     loadState();
