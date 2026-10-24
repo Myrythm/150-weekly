@@ -5,8 +5,11 @@
  *   base   the value this client last synced with the server (null if none)
  *   local  this client's current value
  *   remote the value now on the server (null if the row does not exist)
- * Rule: start from remote; drop ids present in base but absent from local (deleted or pruned
- * locally); add or replace with every local item (local wins).
+ * Rule (three-way): start from remote; drop ids present in base but absent from local (deleted
+ * or pruned locally); add or replace with every local item (local wins), except a local item
+ * whose id is in base but missing from remote: it was deleted elsewhere and is dropped, unless
+ * the local copy differs from its base copy (JSON compare), then the local edit wins and stays.
+ * A null base means nothing counts as deleted; a null remote means everything in base was.
  *
  *   mergeList(base, local, remote, idKey = 'id') -> array
  *     Order: remote order, then new local items in local order.
@@ -29,10 +32,20 @@ var W150Merge = (function () {
     return 'i:' + String(id);
   }
 
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  /* a local item missing from remote: new (not in base), edited since base, or deleted elsewhere */
+  function keepLocalOnly(inBase, baseItem, localItem) {
+    return !inBase || !same(baseItem, localItem);
+  }
+
   function mergeList(base, local, remote, idKey) {
     if (idKey === undefined) idKey = 'id';
-    var baseIds = new Set(), localById = new Map(), seen = new Set(), out = [];
-    asList(base).forEach(function (it) { baseIds.add(idOf(it, idKey)); });
+    var baseById = new Map(), localById = new Map(), seen = new Set(), out = [];
+    asList(base).forEach(function (it) {
+      var id = idOf(it, idKey);
+      if (!baseById.has(id)) baseById.set(id, it);
+    });
     asList(local).forEach(function (it) {
       var id = idOf(it, idKey);
       if (!localById.has(id)) localById.set(id, it);
@@ -41,13 +54,14 @@ var W150Merge = (function () {
       var id = idOf(it, idKey);
       if (seen.has(id)) return;
       if (localById.has(id)) { out.push(localById.get(id)); seen.add(id); return; }
-      if (baseIds.has(id)) return;
+      if (baseById.has(id)) return;
       out.push(it); seen.add(id);
     });
     asList(local).forEach(function (it) {
       var id = idOf(it, idKey);
       if (seen.has(id)) return;
-      out.push(it); seen.add(id);
+      seen.add(id);
+      if (keepLocalOnly(baseById.has(id), baseById.get(id), it)) out.push(it);
     });
     return out;
   }
@@ -59,7 +73,8 @@ var W150Merge = (function () {
       else if (!has(b, k)) out[k] = r[k];
     });
     Object.keys(l).forEach(function (k) {
-      if (!has(out, k)) out[k] = l[k];
+      if (has(r, k)) return;
+      if (keepLocalOnly(has(b, k), b[k], l[k])) out[k] = l[k];
     });
     return out;
   }

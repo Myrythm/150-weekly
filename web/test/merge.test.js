@@ -30,8 +30,22 @@ test('mergeList: null base (first write raced an insert)', () => {
   assert.deepStrictEqual(M.mergeList(null, [c], [b]), [b, c]);
 });
 
-test('mergeList: null remote (row missing on server) gives local', () => {
-  assert.deepStrictEqual(M.mergeList([a], [a, c], null), [a, c]);
+test('mergeList: item deleted remotely stays deleted', () => {
+  assert.deepStrictEqual(M.mergeList([a, b], [a, b, c], [a]), [a, c]);
+});
+
+test('mergeList: remote delete loses to a local edit', () => {
+  const bEdited = { id: 'b', min: 99 };
+  assert.deepStrictEqual(M.mergeList([a, b], [a, bEdited, c], [a]), [a, bEdited, c]);
+});
+
+test('mergeList: null remote (row deleted on server) keeps only new or edited local items', () => {
+  const bEdited = { id: 'b', min: 99 };
+  assert.deepStrictEqual(M.mergeList([a, b], [a, bEdited, c], null), [bEdited, c]);
+});
+
+test('mergeList: null base treats nothing as a remote delete', () => {
+  assert.deepStrictEqual(M.mergeList(null, [a, c], [b]), [b, a, c]);
 });
 
 test('mergeList: custom idKey', () => {
@@ -68,9 +82,17 @@ test('mergeMap: local edit wins', () => {
   assert.deepStrictEqual(M.mergeMap({ t1 }, { t1: t1b }, { t1: t1c }), { t1: t1b });
 });
 
+test('mergeMap: item deleted remotely stays deleted', () => {
+  assert.deepStrictEqual(M.mergeMap({ t1, t2 }, { t1, t2, t3 }, { t1 }), { t1, t3 });
+});
+
+test('mergeMap: remote delete loses to a local edit', () => {
+  assert.deepStrictEqual(M.mergeMap({ t1, t2 }, { t1: t1b, t2 }, { t2 }), { t2, t1: t1b });
+});
+
 test('mergeMap: null base and null remote', () => {
   assert.deepStrictEqual(M.mergeMap(null, { t3 }, { t2 }), { t2, t3 });
-  assert.deepStrictEqual(M.mergeMap({ t1 }, { t1, t3 }, null), { t1, t3 });
+  assert.deepStrictEqual(M.mergeMap({ t1, t2 }, { t1, t2: t1b, t3 }, null), { t2: t1b, t3 });
 });
 
 test('mergeMap: key order is remote order, then new local keys', () => {

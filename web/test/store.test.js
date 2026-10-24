@@ -225,6 +225,17 @@ test('failed auth refresh keeps the write in memory until flush', async () => {
   assert.strictEqual(log.status[log.status.length - 1], 'saved');
 });
 
+test('merge on conflict keeps an item deleted on another device deleted', async () => {
+  const { store, timers, be, log } = setup({ 'w150.sessions': [A, B] });
+  await store.hydrate();
+  be.otherClientWrites('w150.sessions', [A]);
+  store.set('w150.sessions', [A, B, C]);
+  await timers.advance(500);
+  assert.deepStrictEqual(be.rows.get('w150.sessions'), { value: [A, C], version: 3 });
+  assert.deepStrictEqual(store.get('w150.sessions', null), [A, C]);
+  assert.deepStrictEqual(log.remote, [['w150.sessions']]);
+});
+
 test('merges on version conflict', async () => {
   const { store, timers, be, log } = setup({ 'w150.sessions': [A] });
   await store.hydrate();
@@ -415,6 +426,52 @@ test('refresh skips keys with pending writes and returns only changed keys', asy
   assert.deepStrictEqual(store.get('w150.sessions', null), [A, C]);
   assert.deepStrictEqual(store.get('w150.prefs', null), { age: 30 });
   assert.deepStrictEqual(await store.refresh(), []);
+});
+
+test('refresh racing writes that finish during the fetch keeps the newer cache', async () => {
+  const { store, be } = setup({ 'w150.prefs': { age: 30 } });
+  await store.hydrate();
+  let release;
+  const realFetch = be.fetchAll;
+  be.fetchAll = function () {
+    const snap = realFetch();
+    return new Promise((res) => { release = () => res(snap); });
+  };
+  store.set('w150.prefs', { age: 31 });
+  const p = store.refresh();
+  store.set('w150.sessions', [A]);
+  await store.flush();
+  assert.deepStrictEqual(be.rows.get('w150.prefs'), { value: { age: 31 }, version: 2 });
+  assert.deepStrictEqual(be.rows.get('w150.sessions'), { value: [A], version: 1 });
+  release();
+  const changed = await p;
+  be.fetchAll = realFetch;
+  assert.deepStrictEqual(changed, []);
+  assert.deepStrictEqual(store.get('w150.prefs', null), { age: 31 });
+  assert.deepStrictEqual(store.get('w150.sessions', null), [A]);
+  store.set('w150.prefs', { age: 32 });
+  await store.flush();
+  assert.deepStrictEqual(be.rows.get('w150.prefs'), { value: { age: 32 }, version: 3 });
+  assert.deepStrictEqual(await store.refresh(), []);
+});
+
+test('refresh still applies remote changes to keys untouched during the fetch', async () => {
+  const { store, be } = setup({ 'w150.prefs': { age: 30 }, 'w150.plan': { p: 1 } });
+  await store.hydrate();
+  let release;
+  const realFetch = be.fetchAll;
+  be.otherClientWrites('w150.plan', { p: 2 });
+  be.fetchAll = function () {
+    const snap = realFetch();
+    return new Promise((res) => { release = () => res(snap); });
+  };
+  const p = store.refresh();
+  store.set('w150.prefs', { age: 31 });
+  await store.flush();
+  release();
+  assert.deepStrictEqual(await p, ['w150.plan']);
+  assert.deepStrictEqual(store.get('w150.plan', null), { p: 2 });
+  assert.deepStrictEqual(store.get('w150.prefs', null), { age: 31 });
 });
 
 test('reset clears cache, timers and queue', async () => {

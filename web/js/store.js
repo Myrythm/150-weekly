@@ -29,7 +29,8 @@
  *   flush(): Promise<void>       send every queued write now (also writes held after a failed
  *                                auth refresh); resolves when each key succeeded or failed once
  *   pending(): boolean           true while any write is queued, waiting to retry or in flight
- *   refresh(): Promise<string[]> refetch all rows; keys with pending writes are skipped; returns
+ *   refresh(): Promise<string[]> refetch all rows; keys with pending writes, or that were busy or
+ *                                changed at any point during the fetch, are skipped; returns
  *                                the keys whose version changed (or that were added or deleted)
  *   reset()                      clear cache, timers and queue (logout)
  *
@@ -238,21 +239,35 @@ var W150Store = (function () {
 
     async function pull() {
       var gen = generation;
+      /* the fetched rows are a snapshot from somewhere during the request; a key that was busy
+         when it started, is busy now, or changed meanwhile (a write finished, a new key was
+         created) already holds newer data than the snapshot and must not be touched */
+      var before = new Map();
+      entries.forEach(function (e, key) {
+        before.set(key, { e: e, version: e.version, seq: e.seq, busy: busy(e) });
+      });
       var rows = await backend.fetchAll();
       if (gen !== generation) return [];
+      function stable(key) {
+        var e = entries.get(key), b = before.get(key);
+        if (!e) return true;
+        if (!b) return false;
+        return b.e === e && !b.busy && !busy(e) && b.version === e.version && b.seq === e.seq;
+      }
       var seen = new Set(), changed = [];
       (Array.isArray(rows) ? rows : []).forEach(function (r) {
         if (!r || typeof r.key !== 'string') return;
         seen.add(r.key);
+        if (!stable(r.key)) return;
         var e = entry(r.key);
-        if (busy(e) || e.version === r.version) return;
+        if (e.version === r.version) return;
         e.value = copy(r.value);
         e.synced = copy(r.value);
         e.version = r.version;
         changed.push(r.key);
       });
       entries.forEach(function (e, key) {
-        if (seen.has(key) || busy(e)) return;
+        if (seen.has(key) || !stable(key)) return;
         if (e.version === null && e.value === undefined) return;
         e.value = undefined;
         e.synced = undefined;
