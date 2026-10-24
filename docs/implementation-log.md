@@ -1,4 +1,4 @@
-# Implementation log (fixes A to H)
+# Implementation log (fixes A to I)
 
 ## A. #6 Age first, then the age group's WHO 2020 guideline (Opus)
 
@@ -158,3 +158,64 @@ GUIDE_NOTE = copy for the unset preview and the under-5 state (unsetChip, under5
 - New tokens in all three blocks: `--ramp-1..4` and `--chart-area`. New CSS sections: "GPX import" and "GPX detail". No literal colours outside the token blocks.
 
 **Verified:** inline script `node --check` passes, zero em or en dashes, gpx-lib.js is present verbatim, and `node gpx-lib.test.js` gives 50/50. Doctype-wrapped copy served from scratchpad/gsrv (server stopped). Imports used a DataTransfer built from fetched file text, set on `#gpx-file` plus a change event; one batch used a synthetic drop on `#gpx-bar` and one on `#gpx-drop`. Real Mi file: 2.02 km, 13:27 moving, 6:39 /km, 13 min prefilled, date Wed 7 Oct 01:48 (UTC+7 browser), device note 5.05 km vs 2.02 km, vigorous from speed 9.0 km/h. Garmin (age 40): HR basis 144 bpm, 80% of 180, vigorous; pace, elevation and HR charts. Age 15 gives max 198 (Tanaka), 73%, moderate. Strava ride: 25.3 km/h, power 176/263 W, 5 km splits; speed basis without age. Open water: 2:06 /100 m; with HR, 76% moderate; without age, speed 2.9 km/h vigorous. Pool and not-gpx files give inline errors in a 4 file batch. Also checked: route-only (no times), duplicate warning, date and minutes validation, Remove/Undo of track, quota error path (setItem patched), cap (35 tracks injected, then 30 after an import), "no longer stored" view, Clear all. 400px light and dark: scrollWidth 400, no overflowing elements. 1003px in the pane, 1280 light and dark by headless Chrome screenshots. No console errors. Not published.
+
+
+## I. Web version with accounts (Supabase, Vercel prep)
+
+Branch `feat/web-supabase`, commits `7338a76` (tooling) to `104c17c` (auth screens), plus the Task 7 docs commit. The Artifact `weekly-150.html` is untouched and frozen at v5. Plan: `docs/superpowers/plans/2026-10-24-web-supabase.md`; spec: `docs/superpowers/specs/2026-10-23-web-supabase-design.md`.
+
+**Files**
+- Tooling: `package.json` (scripts `db:start`, `db:stop`, `db:reset`, `db:test`, `functions:serve`, `web:build`, `web:build:local`, `test`, `test:smoke`; dev dependency `supabase` 2.122.0), `package-lock.json`, `.env.example`, `supabase/functions/.env.example`, `.claude/launch.json` (`weekly150-web`), `vercel.json`.
+- Database: `supabase/config.toml`, `supabase/migrations/20261024000000_accounts.sql`, `supabase/tests/accounts.test.sql` (59 pgTAP assertions at Task 7, 71 after the final fixes in entry J).
+- Functions: `supabase/functions/_shared/auth.ts`, `auth-login/index.ts`, `auth-recover/index.ts`.
+- Web: `web/index.html`, `web/css/app.css`, `web/js/app.js`, `web/js/auth.js`, `web/js/store.js`, `web/js/merge.js`, `web/test/store.test.js`, `web/test/merge.test.js`; generated and git-ignored: `web/config.js`, `web/js/gpx-lib.js`.
+- Tools: `tools/web/build.js`, `tools/web/serve.js`, `tools/web/smoke.test.js`.
+- Docs: `docs/local-dev.md`, `docs/deploy.md`, `CLAUDE.md`, `docs/PROGRESS.md`, this entry.
+
+**Database**
+- Tables: `public.profiles` (`username` primary key matching `^[a-z0-9_]{3,20}$`, `user_id` unique to `auth.users`, `display_name` trimmed 1 to 40), `public.user_data` (`user_id`, `key` limited to the six allowed `w150.*` keys, `value jsonb`, `version bigint` from the global sequence `user_data_version_seq` (entry J), `updated_at`), `public.auth_attempts` (`bucket`, `created_at`, index on both). RLS on all three; `user_data` and `profiles` policies are `to authenticated` with `(select auth.uid())`; `auth_attempts` has no policies and no client grants. Privileges are explicit (revoke all, then grant). Anon gets 42501 on every table.
+- `handle_new_user()` (security definer, empty `search_path`, trigger `on_auth_user_created` after insert on `auth.users`): validates username, display name and age from user metadata, inserts the profile and a `w150.prefs` row `{"age": N}`. Errors: 22023 for invalid input, 23505 `Username is already taken.` (also on the insert race).
+- `username_available(p_username)` (anon, authenticated, service role). `put_user_data(p_key, p_value, p_expected_version)` returns `(ok, version, value)`; a null `p_expected_version` inserts with `on conflict do nothing`, otherwise an atomic update on the version; both take the new version from `nextval(user_data_version_seq)`, so versions never repeat for a user and key (entry J); SQL NULL value is stored as JSON null; only for `authenticated`.
+
+**Functions** (both `verify_jwt = false`)
+- Shared: `normaliseUsername`, `COPY` (exact copy), `PAD_MS` 400, `allowedOrigins` from `AUTH_REDIRECT_ORIGINS`, `preflight`, `clientIp` (first `x-forwarded-for` entry), `reserveAttempt`/`releaseAttempts`/`hitRateLimit`, `emailForUsername` (profiles then `auth.admin.getUserById`, never user metadata), supabase-js `2.117.2` through `npm:`.
+- `auth-login`: reserve one attempt row in `login:u:<username>` and `login:ip:<ip>`, count, 429 over 10 and 30 in 15 minutes; the unknown username runs `signInWithPassword` against a dummy email; 200 returns only `{ session }`; 403 `email_not_confirmed`; `invalid_credentials` keeps its rows (counts as failed), all other outcomes release them; other GoTrue or database errors give a padded 500.
+- `auth-recover`: validates input and `redirectTo` before limiting; buckets `recover:ip:<ip>` (10) and `recover:id:<identifier>` (3); the lookup and send run in `EdgeRuntime.waitUntil`; always a padded neutral 200.
+
+**Web modules and ids**
+- `W150Merge.mergeList/mergeMap(base, local, remote)` with the three-way delete rule. `W150Store.create(backend, opts)`: `hydrate`, `get`, `set`, `remove`, `flush`, `pending`, `refresh`, `reset`; versioned puts, backoff 1, 2, 4, 8, 16, 30 s, 401 then `refreshAuth`, merge on conflict for sessions and tracks, server wins elsewhere.
+- `W150App.start(ctx)` (once), `reload()`, `setSyncStatus(state)`. `ctx` carries `store`, `profile`, `onLogout`, `onClearAll`. `clearAllData` is async, keeps `prefs.age`, calls `ctx.onClearAll()`. `saveTracks` saves `{}` when empty. Theme stays in localStorage (`loadTheme`/`saveTheme`).
+- Auth screens: `#auth`, `#auth-login`, `#auth-register`, `#auth-check-email`, `#auth-forgot`, `#auth-reset`, message area `#auth-msg`, `#auth-loading`, `#resend-verification`, `#forgot-submit`, `#forgot-resend`, `#check-to-login`, `#forgot-to-login`. App shell: `#app`, `#sync-status`, `#who-name`, `#logout`, `#bib-name`.
+- `auth.js` reads `location.hash` and search before `createClient` (supabase-js consumes the hash), cleans the URL after `getSession()`, routes `error_code` to the forgot screen, recovery to the reset screen, `type=signup` to login with `Email verified. You can log in now.`
+
+**Decisions**
+- Fork, not rewrite: markup, CSS and script come from the Artifact (CSS byte for byte), GPX parser removed from the page script and loaded as `web/js/gpx-lib.js` (copy of `tools/gpx/gpx-lib.js` made by the build). Rule: edit `tools/gpx/gpx-lib.js` only.
+- Anon cannot read tables (42501), reserve then release rate limiting, only `invalid_credentials` counts as a failed login, three-way delete rule in merge, server wins on other key conflicts, logout is `scope: 'local'`, a failed refresh is the only thing that shows the login screen while the app is open, cross-tab user switch resets the store and reloads. Details and reasons are in `docs/PROGRESS.md`.
+- Build guard: `tools/web/build.js` rejects a `SUPABASE_ANON_KEY` that starts with `sb_secret_` or is a JWT whose payload `role` is not `anon` (not a JWT and not `sb_*`: allowed). Checked with a fake service_role JWT (exit 1), `sb_secret_abc` (exit 1), a fake anon JWT, `sb_publishable_abc`, `x`, and the real local key (all pass).
+- `weekly150-web` runs `node tools/web/serve.js` (python is not on PATH).
+- Local-only config: `[auth.rate_limit] email_sent = 60` and `sign_in_sign_ups = 300`. Cloud: custom SMTP, default `email_sent`, raised `sign_in_sign_ups`.
+
+**Verified:** see each task report in `.superpowers/sdd/2026-10-24-web-supabase/`. Final state of Task 7: `npm test` (43 node tests, gpx 42 passed and 1 skipped: the private real GPX file is not in the repo, so "50 passed" is not reproducible here), `npm run db:test`, `npm run test:smoke`; no em or en dashes in `web/`, `supabase/`, `tools/web/`, `docs/`; no `service_role` text in `web/`.
+
+**Not done:** deploy (Supabase cloud, Vercel, SMTP), AI assistant, account deletion. See the open items in `docs/PROGRESS.md` and the follow-ups in `docs/deploy.md`.
+
+
+## J. Web version: final review fixes (F1 to F6)
+
+Branch `feat/web-supabase`, one fix wave after the whole-branch review. Findings and rulings: `.superpowers/sdd/2026-10-24-web-supabase/final-findings.md`; report: `final-fix-report.md` in the same folder.
+
+**F1, versions never repeat (ABA after Clear all).** Before, `user_data.version` started at 1 on insert and counted up by one, so a row deleted by Clear all and inserted again came back at version 1 and a device still holding version 1 kept its stale cache on refresh and overwrote the new row without a conflict. Now `supabase/migrations/20261024000000_accounts.sql` creates `public.user_data_version_seq` (bigint); `user_data.version` is `bigint` with `default nextval(...)`; `put_user_data(text, jsonb, bigint)` returns `(ok boolean, version bigint, value jsonb)` and takes `nextval` on both insert and update. `authenticated` gets `usage` on the sequence (the function is security invoker), `service_role` all, `anon` nothing. Versions have gaps and are only compared for equality; the store needed no change. Applied with `npm run db:reset` (local test accounts wiped).
+- pgTAP (`supabase/tests/accounts.test.sql`, 71): literal versions replaced by relational checks (captured with `set_config('t.*')`, new version greater than the old, stale version conflicts); new checks for the sequence, the bigint column, sequence privileges, and insert, delete, insert again, then a put with the old version gives `ok = false` and leaves the new row.
+- `web/test/store.test.js`: the fake backend takes `{ globalVersions: true }` to model the sequence; new tests "refresh replaces a row deleted and inserted again with a new version" and "a put with the version from before a delete and re-insert conflicts and merges".
+
+**F2, one sample on a brand-new account.** `seedSessions()` in `web/js/app.js` uses ids `sample_0` to `sample_33` and `createdAt` from the start of today instead of `makeId()` and `Date.now()`; the sample plan's `savedAt` is the start of today. Two devices that seed at once write identical values, so sessions merge to one copy and the plan conflict changes nothing. Behaviour otherwise unchanged (cleared by the first real entry). Store test "two devices seeding the same sample on a new account end with one copy and no notice".
+
+**F3, no notice without a local edit.** `conflict()` in `web/js/store.js` still adopts the server value for keys without a merger and calls `onRemoteChange`, but calls `onNotice` only when the local value differed from the last synced value (a real edit). `persist()` rewrites unchanged keys on every log, which used to trigger the notice. Copy is now `Another device saved a newer version, so your last change was replaced.` Tests "server wins notice copy" and "non-list key conflict without a local edit: server wins quietly".
+
+**F4, SRI.** The supabase-js 2.118.0 tag in `web/index.html` has `integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK"` and `crossorigin="anonymous"` (hash of the exact file jsDelivr serves, 218252 bytes, computed with openssl and node crypto, same result on two downloads). Upgrading supabase-js means recomputing it.
+
+**F5, a sign-up 500 is not always "Username taken."** On a 500 (`unexpected_failure`, database message) the register handler in `web/js/auth.js` calls `usernameTaken()` (the `username_available` RPC, keeping the button busy) and shows `Username taken.` only when the server answers false; otherwise, or on any RPC error, `Something went wrong. Try again.` The earlier checks (429, weak password, email, offline) keep their order.
+
+**F6, docs.** `docs/deploy.md` step 2.5: without `AUTH_REDIRECT_ORIGINS` the functions fall back to the local origins and recovery requests from the real domain answer 400. `docs/PROGRESS.md` and entry I above describe the global sequence instead of versions counting from 1.
+
+**Verified:** `npm test` 48 store and merge tests pass (gpx 42 passed, 1 skipped, the private file is absent); `npm run db:test` 71 of 71; `npm run test:smoke` 14 of 14. RED first: the old schema let the stale put through (`have: (t, ...)`, `want: (f, ...)`), and 4 new store tests failed before the fix. Browser on http://127.0.0.1:8160: supabase-js loads with the integrity attribute (no integrity errors), login screen renders; registered `fx_reg1`, verified through Mailpit, logged in: server rows have versions 49 to 52 from the sequence, sessions `sample_0` to `sample_33`. Sign-up with a simulated 500 for a free username shows the generic copy; a real trigger 500 for the taken `fx_reg1` shows `Username taken.`. No em or en dashes.
