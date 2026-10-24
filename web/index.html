@@ -8,25 +8,25 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="css/app.css">
 </head>
-<body>
+<body data-page="week">
 <div id="app" hidden>
 <a class="skip-link" href="#main">Skip to content</a>
 
 <header class="site-header">
   <div class="wrap header-inner">
-    <a class="wordmark" href="#week" id="wordmark">Weekly<span>150</span></a>
+    <a class="wordmark" href="/#week" id="wordmark">Weekly<span>150</span></a>
     <nav class="nav" aria-label="Sections">
-      <a href="#log" id="nav-log">Log</a>
-      <a href="#streak" id="nav-streak">Streak</a>
-      <a href="#plan" id="nav-plan">Plan</a>
-      <a href="#snacks" id="nav-snacks">Snacks</a>
-      <a href="#sitless" id="nav-sitless">Sit less</a>
-      <a href="#evidence" id="nav-evidence">Evidence</a>
+      <a href="/#log" id="nav-log">Log</a>
+      <a href="/#streak" id="nav-streak">Streak</a>
+      <a href="/#plan" id="nav-plan">Plan</a>
+      <a href="/#snacks" id="nav-snacks">Snacks</a>
+      <a href="/log" id="nav-history">Full log</a>
+      <a href="/#evidence" id="nav-evidence">Evidence</a>
     </nav>
     <div class="header-actions">
       <span class="small sync-status" id="sync-status" role="status" aria-live="polite"></span>
       <span class="who" id="who-name"></span>
-      <a class="btn btn-accent btn-small only-mobile" id="header-log" href="#log">Log a session</a>
+      <a class="btn btn-accent btn-small only-mobile" id="header-log" href="/#log">Log a session</a>
       <button class="btn btn-outline btn-small" id="theme-toggle" type="button">Theme: Auto</button>
       <button class="btn btn-outline btn-small" id="logout" type="button">Log out</button>
     </div>
@@ -196,6 +196,7 @@
     </div>
     <ul class="gpx-errors" id="gpx-errors" role="alert" hidden></ul>
     <p class="status gpx-status" id="gpx-status" role="status" aria-live="polite"></p>
+    <p class="gpx-last" id="gpx-last" hidden><a class="btn-text" id="gpx-last-link" href="/activity">See the details of this import</a></p>
     <form class="gpx-review" id="gpx-review" aria-labelledby="gpx-r-title" novalidate hidden>
       <div>
         <p class="label gpx-r-count" id="gpx-r-count">Import review</p>
@@ -274,29 +275,15 @@
         <button class="btn-text" id="undo-btn" type="button">Undo</button>
       </div>
     </div>
+    <div class="history-link" id="history-link">
+      <a class="btn btn-outline btn-small" href="/log" id="splits-history">See the full log</a>
+      <p class="small muted" id="splits-history-help">Every week you have logged, newest first.</p>
+    </div>
     <div class="gpx-earlier" id="gpx-earlier" hidden>
       <h3 class="label" id="gpx-earlier-heading">Earlier imports</h3>
       <p class="small muted" id="gpx-earlier-help">Imported activities from other weeks. They count toward their own week.</p>
       <ul class="earlier-list" id="gpx-earlier-list" aria-labelledby="gpx-earlier-heading"></ul>
     </div>
-    <section class="gpx-detail" id="gpx-detail" aria-labelledby="gpx-d-title" hidden>
-      <div class="gpx-d-top">
-        <div class="gpx-d-id">
-          <p class="label gpx-d-eyebrow"><span>Activity details</span><span class="tag tag-sample" id="gpx-d-sample" hidden>Sample</span></p>
-          <h3 class="gpx-d-title" id="gpx-d-title" tabindex="-1"></h3>
-          <p class="gpx-d-meta" id="gpx-d-meta"></p>
-        </div>
-        <button class="btn btn-outline btn-small" id="gpx-d-close" type="button">Close</button>
-      </div>
-      <p class="gpx-d-effort"><span class="tag" id="gpx-d-effort"></span><span id="gpx-d-basis"></span></p>
-      <p class="small muted" id="gpx-d-hrnote" hidden>Estimated max heart rate is 220 minus your age (208 minus 0.7 x age under 18). Real maximums vary by about 10 bpm either way.</p>
-      <p class="gpx-d-missing" id="gpx-d-missing" hidden></p>
-      <div id="gpx-d-body"></div>
-      <div class="gpx-d-foot">
-        <p class="small gpx-note" id="gpx-d-device" hidden></p>
-        <p class="small muted" id="gpx-d-privacy">Saved to your account. Only you can see it.</p>
-      </div>
-    </section>
   </div>
 </section>
 
@@ -464,49 +451,6 @@
   </div>
 </section>
 
-<!-- Sit less -->
-<section class="section" id="sitless" aria-labelledby="sitless-heading">
-  <div class="wrap">
-    <div class="section-head">
-      <p class="label">Sit less</p>
-      <h2 class="h2" id="sitless-heading">Break up the sitting.</h2>
-    </div>
-    <div class="sit-layout">
-      <div class="sit-copy">
-        <p class="measure" id="sit-p1"></p>
-        <p class="measure" id="sit-p2"></p>
-        <p class="small sit-source">Source: <a href="https://www.who.int/publications/i/item/9789240015128" target="_blank" rel="noopener" id="sit-source-link">WHO guidelines on physical activity and sedentary behaviour, 2020</a><span class="sr-only"> (opens in a new tab)</span></p>
-        <p class="small sit-light" id="sit-light">Moved for longer than a minute or two? <a href="#log" id="sit-log-link">Log it as Light</a>. <span id="sit-light-note">It shows in your log but does not count toward your 150 minutes.</span></p>
-        <label class="check" for="sit-nudge"><input type="checkbox" id="sit-nudge"><span>Nudge me every 30 minutes while this page is open</span></label>
-        <p class="small muted" id="sit-nudge-help">The nudge only works while this page stays open. Nothing is sent to your device.</p>
-        <div class="sit-nudge" id="sit-nudge-msg" role="status" hidden>
-          <p id="sit-nudge-text"></p>
-          <div class="row">
-            <button class="btn btn-accent btn-small" id="sit-nudge-move" type="button">I got up and moved</button>
-            <button class="btn-text" id="sit-nudge-snooze" type="button">Not now</button>
-          </div>
-        </div>
-      </div>
-      <div class="plan-card sit-card" id="sit-card">
-        <span class="pin pin-tl"></span><span class="pin pin-tr"></span><span class="pin pin-bl"></span><span class="pin pin-br"></span>
-        <p class="label sit-label"><span>Move breaks today</span><span class="tag tag-sample" id="sit-sample-tag" hidden>Sample</span></p>
-        <p class="sit-count" id="sit-count">0</p>
-        <div class="sit-marks" id="sit-marks" aria-hidden="true"></div>
-        <div class="plan-days" id="sit-days" aria-hidden="true"></div>
-        <p class="small plan-caption" id="sit-caption"></p>
-        <div class="plan-actions">
-          <button class="btn btn-accent" id="sit-break" type="button">I got up and moved</button>
-        </div>
-        <div class="toast" id="sit-undo-bar" role="status" hidden>
-          <span id="sit-undo-text"></span>
-          <button class="btn-text" id="sit-undo" type="button">Undo</button>
-        </div>
-        <p class="small muted sit-note">A break is not a session. It adds no minutes to your week.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- Evidence -->
 <section class="section" id="evidence" aria-labelledby="evidence-heading">
   <div class="wrap">
@@ -540,144 +484,13 @@
   </div>
 </footer>
 </div>
-<div class="auth" id="auth">
-<header class="site-header auth-header">
-  <div class="wrap header-inner">
-    <span class="wordmark" id="auth-wordmark">Weekly<span>150</span></span>
-  </div>
-</header>
-<main class="band auth-band" id="auth-main">
-  <div class="wrap auth-grid">
-    <div class="auth-intro">
-      <p class="label">Race entry</p>
-      <h1 class="h1" id="auth-heading">Bank 150 minutes a week.</h1>
-      <p class="lead" id="auth-lead">Log in to pick up your log, plan and imports on any device. Only you can see them.</p>
-    </div>
-    <div class="panel auth-card">
-      <div class="auth-strip label" aria-hidden="true"><span>Entry desk</span><span>Weekly 150</span></div>
-      <div class="auth-body">
-        <p class="small muted" id="auth-loading">Checking your entry.</p>
-        <p class="auth-msg" id="auth-msg" role="status" aria-live="polite"></p>
-
-        <section class="auth-screen" id="auth-login" aria-labelledby="auth-login-title" hidden>
-          <h2 class="h3" id="auth-login-title" tabindex="-1">Log in</h2>
-          <form class="form-stack" id="login-form" novalidate>
-            <div class="field">
-              <label class="label" for="login-username">Username</label>
-              <input class="input" id="login-username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="40" aria-describedby="login-username-err">
-              <p class="error" id="login-username-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="login-password">Password</label>
-              <input class="input" id="login-password" name="password" type="password" autocomplete="current-password" aria-describedby="login-password-err">
-              <p class="error" id="login-password-err" hidden></p>
-            </div>
-            <button class="btn btn-accent btn-block" id="login-submit" type="submit">Log in</button>
-            <button class="btn btn-outline btn-block" id="resend-verification" type="button" hidden>Resend verification email</button>
-          </form>
-          <div class="auth-links">
-            <button class="btn-text" id="to-forgot" type="button">Forgot password?</button>
-            <button class="btn-text" id="to-register" type="button">Create an account</button>
-          </div>
-        </section>
-
-        <section class="auth-screen" id="auth-register" aria-labelledby="auth-register-title" hidden>
-          <h2 class="h3" id="auth-register-title" tabindex="-1">Create an account</h2>
-          <form class="form-stack" id="register-form" novalidate>
-            <div class="field">
-              <label class="label" for="reg-username">Username</label>
-              <input class="input" id="reg-username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="40" aria-describedby="reg-username-help reg-username-err">
-              <p class="small muted" id="reg-username-help">3 to 20 lowercase letters, numbers or underscores. You log in with it, and it cannot be changed later.</p>
-              <p class="error" id="reg-username-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="reg-display">Display name</label>
-              <input class="input" id="reg-display" name="display_name" type="text" autocomplete="nickname" maxlength="60" aria-describedby="reg-display-help reg-display-err">
-              <p class="small muted" id="reg-display-help">Printed on your race bib. Up to 40 characters.</p>
-              <p class="error" id="reg-display-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="reg-email">Email</label>
-              <input class="input" id="reg-email" name="email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" aria-describedby="reg-email-help reg-email-err">
-              <p class="small muted" id="reg-email-help">Only used to verify your account and reset your password.</p>
-              <p class="error" id="reg-email-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="reg-age">Age in years</label>
-              <input class="input age-input" id="reg-age" name="age" type="number" inputmode="numeric" min="0" max="120" step="1" autocomplete="off" aria-describedby="reg-age-help reg-age-err">
-              <p class="small muted" id="reg-age-help">Sets which WHO targets you see. You can change it later.</p>
-              <p class="error" id="reg-age-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="reg-password">Password</label>
-              <input class="input" id="reg-password" name="password" type="password" autocomplete="new-password" aria-describedby="reg-password-help reg-password-err">
-              <p class="small muted" id="reg-password-help">At least 8 characters.</p>
-              <p class="error" id="reg-password-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="reg-password2">Verify password</label>
-              <input class="input" id="reg-password2" name="password2" type="password" autocomplete="new-password" aria-describedby="reg-password2-err">
-              <p class="error" id="reg-password2-err" hidden></p>
-            </div>
-            <button class="btn btn-accent btn-block" id="reg-submit" type="submit">Create account</button>
-          </form>
-          <div class="auth-links">
-            <button class="btn-text" id="to-login" type="button">I have an account. Log in</button>
-          </div>
-        </section>
-
-        <section class="auth-screen" id="auth-check-email" aria-labelledby="auth-check-title" hidden>
-          <h2 class="h3" id="auth-check-title" tabindex="-1">Check your email</h2>
-          <p id="auth-check-text">Check your email to verify your account, then log in.</p>
-          <p class="small muted" id="auth-check-help">No email after a few minutes? Look in your spam folder, or log in and ask for a new one.</p>
-          <button class="btn btn-accent btn-block" id="check-to-login" type="button">Go to log in</button>
-        </section>
-
-        <section class="auth-screen" id="auth-forgot" aria-labelledby="auth-forgot-title" hidden>
-          <h2 class="h3" id="auth-forgot-title" tabindex="-1">Reset your password</h2>
-          <form class="form-stack" id="forgot-form" novalidate>
-            <p class="small muted" id="forgot-help">Enter your username or the email you signed up with. We send a link to set a new password.</p>
-            <div class="field">
-              <label class="label" for="forgot-identifier">Username or email</label>
-              <input class="input" id="forgot-identifier" name="identifier" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="forgot-help forgot-identifier-err">
-              <p class="error" id="forgot-identifier-err" hidden></p>
-            </div>
-            <button class="btn btn-accent btn-block" id="forgot-submit" type="submit">Send reset link</button>
-            <button class="btn btn-outline btn-block" id="forgot-resend" type="button">Send a new verification email</button>
-          </form>
-          <div class="auth-links">
-            <button class="btn-text" id="forgot-to-login" type="button">Back to log in</button>
-          </div>
-        </section>
-
-        <section class="auth-screen" id="auth-reset" aria-labelledby="auth-reset-title" hidden>
-          <h2 class="h3" id="auth-reset-title" tabindex="-1">Set a new password</h2>
-          <form class="form-stack" id="reset-form" novalidate>
-            <div class="field">
-              <label class="label" for="reset-password">New password</label>
-              <input class="input" id="reset-password" name="password" type="password" autocomplete="new-password" aria-describedby="reset-password-help reset-password-err">
-              <p class="small muted" id="reset-password-help">At least 8 characters.</p>
-              <p class="error" id="reset-password-err" hidden></p>
-            </div>
-            <div class="field">
-              <label class="label" for="reset-password2">Verify new password</label>
-              <input class="input" id="reset-password2" name="password2" type="password" autocomplete="new-password" aria-describedby="reset-password2-err">
-              <p class="error" id="reset-password2-err" hidden></p>
-            </div>
-            <button class="btn btn-accent btn-block" id="reset-submit" type="submit">Save new password</button>
-          </form>
-        </section>
-      </div>
-    </div>
-  </div>
-</main>
-</div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" integrity="sha384-TcHRA3zBbn+Lexh5n+Oil4guNPOS3rjNDpGRAN46u/s/mB2IZ50ceC6TYDU2yvgK" crossorigin="anonymous"></script>
 <script src="config.js"></script>
 <script src="js/gpx-lib.js"></script>
 <script src="js/merge.js"></script>
 <script src="js/store.js"></script>
 <script src="js/app.js"></script>
+<script src="js/auth-screens.js"></script>
 <script src="js/auth.js"></script>
 </body>
 </html>

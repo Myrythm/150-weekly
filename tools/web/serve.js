@@ -1,7 +1,7 @@
 /*
  * Tiny static server for the web version, no dependencies: serves web/ on 127.0.0.1:8160.
  *   node tools/web/serve.js [port]
- * GET and HEAD only, "/" serves index.html, paths outside web/ are refused.
+ * GET and HEAD only, "/" serves index.html, "/log" serves log.html (clean URLs), paths outside web/ are refused.
  */
 'use strict';
 const http = require('http');
@@ -34,6 +34,8 @@ const server = http.createServer(function (req, res) {
   try { rel = decodeURIComponent(new URL(req.url, 'http://' + HOST).pathname); } catch (e) { send(res, 400, 'Bad request'); return; }
   if (rel.indexOf('\0') !== -1) { send(res, 400, 'Bad request'); return; }
   if (rel.endsWith('/')) rel += 'index.html';
+  /* clean URLs like Vercel's cleanUrls: /log serves log.html, /activity serves activity.html */
+  else if (!path.extname(rel)) rel += '.html';
   const file = path.resolve(ROOT, '.' + rel);
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) { send(res, 403, 'Forbidden'); return; }
   fs.stat(file, function (err, st) {

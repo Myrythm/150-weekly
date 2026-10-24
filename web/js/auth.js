@@ -72,7 +72,9 @@
     var q = new URLSearchParams(INITIAL_SEARCH.slice(1));
     ['error', 'error_code', 'error_description', 'type', 'code'].forEach(function (k) { q.delete(k); });
     var rest = q.toString();
-    try { history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '')); } catch (e) { /* ignore */ }
+    /* a plain section anchor (/#splits from the full log page) survives; auth link hashes are dropped */
+    var keep = /^#[a-z][a-z0-9-]*$/.test(INITIAL_HASH) ? INITIAL_HASH : '';
+    try { history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + keep); } catch (e) { /* ignore */ }
   }
 
   /* the auth screens follow the theme picked inside the app (stored in this browser) */
