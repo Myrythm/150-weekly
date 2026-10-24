@@ -20,7 +20,8 @@ Then, in a second terminal, serve the Edge Functions (see below), and start the 
 
 - `npm install` pins the Supabase CLI (`supabase` 2.122.0) as a dev dependency. Use it through `npx supabase ...` or the npm scripts.
 - `npm run web:build:local` runs `node tools/web/build.js --local`. It reads `API_URL` and `ANON_KEY` from `npx supabase status -o env` and writes `app/.env.local` (`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`), and it copies `tools/gpx/gpx-lib.js` to `app/public/gpx-lib.js`, which `app/index.html` loads as a classic script. Both outputs are git-ignored. Rerun it after every `tools/gpx/gpx-lib.js` change and after `db:reset` or any change of keys, then restart the dev server (Vite reads `.env.local` at start).
-- `npm run app:build` runs the same build step (from `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the environment or `.env`) and then `vite build` into `app/dist`. Use it to check that the production build passes.
+- `npm run app:build:local` runs `node tools/web/build.js --local` and then `vite build` into `app/dist`, so it needs only the local stack (like `web:build:local`). Use it to check that the production build passes on your machine.
+- `npm run app:build` is the Vercel and cloud build: it runs the build step without `--local`, so it needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the environment or `.env` and exits 1 without them. It also rewrites `app/.env.local` from those values. If you run it locally, rerun `npm run web:build:local` afterwards to restore `app/.env.local` for the local stack, then restart the dev server; otherwise the dev server talks to the cloud project.
 - The build refuses a `SUPABASE_ANON_KEY` that starts with `sb_secret_` or that is a JWT whose `role` is not `anon`. Only the URL and anon key may reach the browser.
 
 ## Useful URLs

@@ -392,6 +392,38 @@ describe('useTimer', function () {
     timer.dispose();
   });
 
+  test('dispose closes the AudioContext it made, and a second dispose is harmless', function () {
+    const made = [];
+    const Stub = function () { this.closed = 0; this.close = function () { this.closed++; return Promise.resolve(); }; made.push(this); };
+    const prev = window.AudioContext;
+    window.AudioContext = Stub;
+    try {
+      const { data, timer } = makeTimer({ t: 0 });
+      data.prefs.sound = true;
+      timer.load('desk');
+      timer.start();
+      timer.start();
+      timer.start();
+      expect(made).toHaveLength(1);
+      timer.dispose();
+      expect(made[0].closed).toBe(1);
+      timer.dispose();
+      expect(made[0].closed).toBe(1);
+    } finally { window.AudioContext = prev; }
+  });
+
+  test('dispose survives a context whose close throws', function () {
+    const prev = window.AudioContext;
+    window.AudioContext = function () { this.close = function () { throw new Error('boom'); }; };
+    try {
+      const { data, timer } = makeTimer({ t: 0 });
+      data.prefs.sound = true;
+      timer.load('desk');
+      timer.start();
+      expect(function () { timer.dispose(); }).not.toThrow();
+    } finally { window.AudioContext = prev; }
+  });
+
   test('every routine builds steps that add up to its length', function () {
     ROUTINES.forEach(function (r) {
       const clock = { t: 0 };

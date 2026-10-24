@@ -13,7 +13,7 @@ Start every session by reading `docs/PROGRESS.md` (status, features, storage, au
 - Colours only as tokens in all three theme blocks, 400px with no horizontal scroll, visible focus, a stable id on every control, all server and user text through `{{ }}` or `textContent` (never `v-html`).
 - Exact copy: `Wrong username or password.`, `If that account exists, we sent an email.`, `Too many attempts. Try again in a few minutes.`
 - Run: `npm install`, `npm run db:start`, `npm run web:build:local`, `npm run functions:serve` (second terminal), start the `weekly150-web` server (`npm run app:dev`, Vite on 127.0.0.1:8160). Node 22.12 or newer. Details in `docs/local-dev.md`.
-- Verify before calling a change done: `npm test` (Vitest suite in `app/test` plus the gpx test), `npm run db:test`, `npm run test:smoke`, then a browser check on `weekly150-web` (register, verify through Mailpit at 127.0.0.1:54324, log in, log a session, reload; 375px and desktop, light and dark). Never run `db:reset` or `db:stop` while someone else uses the stack.
+- Verify before calling a change done: `npm test` (Vitest suite in `app/test` plus the gpx test), `npm run db:test`, `npm run test:smoke`, `npm run app:build:local` (exit 0), then a browser check on `weekly150-web` (register, verify through Mailpit at 127.0.0.1:54324, log in, log a session, reload; 375px and desktop, light and dark). Never run `db:reset` or `db:stop` while someone else uses the stack.
 - Deploy per `docs/deploy.md` (Supabase `db push`, functions with `--no-verify-jwt`, Vercel env `SUPABASE_URL` and `SUPABASE_ANON_KEY`; Vercel runs `npm ci` and `npm run app:build` and serves `app/dist` with a SPA rewrite).
 
 ## Rules for the frozen Artifact (`weekly-150.html` only)

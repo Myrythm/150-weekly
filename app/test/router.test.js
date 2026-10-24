@@ -104,3 +104,56 @@ test('page titles come from route meta, default Weekly 150', async () => {
   await router.push('/');
   expect(document.title).toBe('Weekly 150');
 });
+
+test('a logged-in visitor sent to /reset by next lands on the week page and no expired copy is left behind', async () => {
+  const { router, auth } = setup();
+  auth.user = { id: 'u1' };
+  await router.push('/login?next=/reset');
+  expect(router.currentRoute.value.name).toBe('week');
+  expect(auth.msg.text).toBe('');
+});
+
+test('opening /reset while logged in does not set the expired copy', async () => {
+  const { router, auth } = setup();
+  auth.user = { id: 'u1' };
+  await router.push('/reset');
+  expect(router.currentRoute.value.name).toBe('week');
+  expect(auth.msg.text).toBe('');
+});
+
+test('Back and Forward between auth screens clear the previous message', async () => {
+  const { router, auth } = setup();
+  await router.push('/login');
+  await router.push('/register');
+  auth.setMsg('Wrong username or password.', 'error');
+  router.back();
+  await new Promise(function (r) { setTimeout(r, 10); });
+  expect(router.currentRoute.value.name).toBe('login');
+  expect(auth.msg.text).toBe('');
+  auth.setMsg('Wrong username or password.', 'error');
+  router.forward();
+  await new Promise(function (r) { setTimeout(r, 10); });
+  expect(router.currentRoute.value.name).toBe('register');
+  expect(auth.msg.text).toBe('');
+});
+
+test('a message set for a forward navigation stays', async () => {
+  const { router, auth } = setup();
+  await router.push('/login');
+  auth.setMsg('New password saved.', 'ok');
+  await router.push('/forgot');
+  expect(auth.msg.text).toBe('New password saved.');
+});
+
+test('Back onto a route whose guard sets a new message keeps that message', async () => {
+  const { router, auth } = setup();
+  auth.recoveryMode = true;
+  await router.push('/reset');
+  await router.push('/login');
+  auth.recoveryMode = false;
+  auth.setMsg('stale', 'error');
+  router.back();
+  await new Promise(function (r) { setTimeout(r, 10); });
+  expect(router.currentRoute.value.name).toBe('forgot');
+  expect(auth.msg.text).toBe('This link has expired or was already used. Request a new one.');
+});

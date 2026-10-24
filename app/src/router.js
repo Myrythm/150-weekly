@@ -42,6 +42,8 @@ export function createAppRouter(pinia, opts) {
   opts = opts || {};
   const auth = useAuthStore(pinia);
 
+  function loggedIn() { return !!auth.user && !auth.sessionEnded; }
+
   const routes = [
     { path: '/', name: 'week', component: WeekPage, meta: { auth: true } },
     { path: '/log', name: 'log', component: LogPage, meta: { auth: true, title: 'Full log, Weekly 150' } },
@@ -54,6 +56,8 @@ export function createAppRouter(pinia, opts) {
       path: '/reset', name: 'reset', component: ResetPage, meta: { guest: true },
       beforeEnter: function () {
         if (auth.recoveryMode) return true;
+        /* a logged-in visitor is sent away from the auth screens: no message for a screen they never see */
+        if (loggedIn()) return { path: '/' };
         auth.setMsg(COPY.expired, 'error');
         auth.setFocus('forgot-identifier');
         return { name: 'forgot' };
@@ -92,7 +96,13 @@ export function createAppRouter(pinia, opts) {
 
   const router = createRouter({ history: opts.history || createWebHistory(), routes: routes, scrollBehavior: scrollBehavior });
 
-  function loggedIn() { return !!auth.user && !auth.sessionEnded; }
+  /* Back and Forward: the message of the screen being left must not show on the one reached, unless
+     that navigation sets a new message (the /reset guard). A forward navigation (push, replace) keeps
+     what the leaving screen set for the next one ("New password saved."). */
+  let popSeq = null;
+  router.options.history.listen(function (to, from, info) {
+    if (info && info.type === 'pop') popSeq = auth.msgSeq;
+  });
 
   router.beforeEach(async function (to, from) {
     await auth.whenReady();
@@ -121,7 +131,11 @@ export function createAppRouter(pinia, opts) {
   });
 
   /* the title of a page comes from route meta.title; a page that needs a dynamic title sets it itself after this runs */
-  router.afterEach(function (to) { document.title = to.meta.title || DEFAULT_TITLE; });
+  router.afterEach(function (to) {
+    if (popSeq !== null && auth.msgSeq === popSeq) auth.setMsg('');
+    popSeq = null;
+    document.title = to.meta.title || DEFAULT_TITLE;
+  });
 
   return router;
 }

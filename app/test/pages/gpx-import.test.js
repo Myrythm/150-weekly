@@ -263,6 +263,47 @@ describe('GPX review card', function () {
     wrapper.unmount();
   });
 
+  test('with two files the card stays on screen between Save of the first and the review of the second', async function () {
+    const { wrapper, data } = await mountWeek();
+    dropFiles('#gpx-drop', [fixture('garmin-run-hr-ele.gpx'), fixture('strava-ride-power.gpx')]);
+    await reviewShown();
+    expect(text('#gpx-r-file')).toBe('File: garmin-run-hr-ele.gpx');
+    q('#gpx-save').focus();
+    await wrapper.find('#gpx-review').trigger('submit');
+    /* the second file is still being read: the first card is still there, with no duplicate note of itself */
+    expect(q('#gpx-review').hidden).toBe(false);
+    expect(text('#gpx-r-file')).toBe('File: garmin-run-hr-ele.gpx');
+    expect(q('#gpx-dup').hidden).toBe(true);
+    expect(data.sessions.length).toBe(1);
+    /* a second Save on the held card does nothing */
+    await wrapper.find('#gpx-review').trigger('submit');
+    expect(data.sessions.length).toBe(1);
+    await vi.waitFor(function () { expect(text('#gpx-r-file')).toBe('File: strava-ride-power.gpx'); });
+    await flushPromises();
+    expect(q('#gpx-review').hidden).toBe(false);
+    expect(document.activeElement).toBe(q('#gpx-r-title'));
+    await wrapper.find('#gpx-review').trigger('submit');
+    await flushPromises();
+    expect(data.sessions.length).toBe(2);
+    expect(q('#gpx-review').hidden).toBe(true);
+    expect(document.activeElement).toBe(q('#gpx-last-link'));
+    wrapper.unmount();
+  });
+
+  test('Skip this file also keeps the card until the next review, and the last Skip closes it', async function () {
+    const { wrapper } = await mountWeek();
+    dropFiles('#gpx-drop', [fixture('garmin-run-hr-ele.gpx'), fixture('strava-ride-power.gpx')]);
+    await reviewShown();
+    await wrapper.find('#gpx-cancel').trigger('click');
+    expect(q('#gpx-review').hidden).toBe(false);
+    expect(text('#gpx-r-file')).toBe('File: garmin-run-hr-ele.gpx');
+    await vi.waitFor(function () { expect(text('#gpx-r-file')).toBe('File: strava-ride-power.gpx'); });
+    await wrapper.find('#gpx-cancel').trigger('click');
+    await flushPromises();
+    expect(q('#gpx-review').hidden).toBe(true);
+    wrapper.unmount();
+  });
+
   test('changing the activity re-reads the file for that type', async function () {
     const { wrapper } = await mountWeek();
     pickFiles([fixture('garmin-run-hr-ele.gpx')]);

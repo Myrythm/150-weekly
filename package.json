@@ -18,6 +18,7 @@
     "test:smoke": "node --test tools/web/smoke.test.js",
     "app:dev": "vite --config app/vite.config.mjs",
     "app:build": "node tools/web/build.js && vite build --config app/vite.config.mjs",
+    "app:build:local": "node tools/web/build.js --local && vite build --config app/vite.config.mjs",
     "app:test": "vitest run --config app/vite.config.mjs"
   },
   "devDependencies": {

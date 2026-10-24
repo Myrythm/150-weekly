@@ -53,6 +53,7 @@ export const useAuthStore = defineStore('auth', function () {
   const sessionEnded = ref(false);
   const syncState = ref('');         /* '' | 'saving' | 'saved' | 'error' */
   const msg = ref({ text: '', tone: '' });
+  const msgSeq = ref(0);             /* counts setMsg calls: the router tells a new message from a stale one */
   const notice = ref({ text: '', seq: 0 });   /* text for the live region (onNotice, New password saved.) */
   const recoveryMode = ref(false);
   const loggingOut = ref(false);
@@ -76,7 +77,7 @@ export const useAuthStore = defineStore('auth', function () {
   let hooked = false;
 
   /* ===== messages and focus ===== */
-  function setMsg(text, tone) { msg.value = { text: text || '', tone: text && tone ? tone : '' }; }
+  function setMsg(text, tone) { msgSeq.value++; msg.value = { text: text || '', tone: text && tone ? tone : '' }; }
   /* id to focus on the next auth screen: a string, false for none, undefined for its title */
   function setFocus(id) { focusTarget = id; }
   function takeFocus() { const f = focusTarget; focusTarget = undefined; return f; }
@@ -416,7 +417,7 @@ export const useAuthStore = defineStore('auth', function () {
   }
 
   return {
-    client, user, profile, ready, sessionEnded, syncState, msg, notice, recoveryMode, loggingOut, drafts,
+    client, user, profile, ready, sessionEnded, syncState, msg, msgSeq, notice, recoveryMode, loggingOut, drafts,
     configure, boot, whenReady, setMsg, setFocus, takeFocus, announce,
     login, register, checkRegister, usernameStatus, usernameTaken, markTaken, clearTaken,
     recover, resetPassword, goLogin, logout, onSessionEnded, flush, pending, installWindowHooks

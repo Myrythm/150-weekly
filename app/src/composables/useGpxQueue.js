@@ -13,7 +13,10 @@
  *   enqueue(files, trigger)  add picked or dropped files; trigger is the id of the control that started the batch
  *   pick(trigger)            open the shared file input (registerInput(el) gives it to the queue)
  *   item                     the file under review: { name, text, detected, baseType, type, cache, seq,
- *                            minutesTouched, effortTouched } (reactive), or null
+ *                            minutesTouched, effortTouched, held, dup } (reactive), or null. After Save
+ *                            or Skip with more files pending the item stays (held: true, inert) until
+ *                            the next file's review replaces it or the batch ends, so the card does
+ *                            not vanish and focus does not drop between files.
  *   analysis, judge, duplicate   the review's analysis for item.type, its effort and a matching earlier import
  *   status, errors, total, index, pendingCount, lastSavedId
  *   focus                    { what: 'review' | 'last' | <control id>, seq }: the review component moves focus
@@ -94,6 +97,8 @@ function createQueue() {
   const duplicate = computed(function () {
     const r = analysis.value;
     if (!r) return null;
+    /* a held item keeps the note it had when it was saved (saving it would otherwise match itself) */
+    if (item.value && item.value.held) return item.value.dup;
     const st = r.info.startTime, d = r.metrics.distanceM, tracks = data.tracks;
     if (!isNum(st)) return null;
     const id = Object.keys(tracks).find(function (k) { const x = tracks[k]; return x.startTime === st && Math.abs(x.metrics.distanceM - d) <= Math.max(5, d * 0.01); });
@@ -142,7 +147,7 @@ function createQueue() {
     let r;
     try { r = GPX.analyze(text, gpxOpts(undefined, data.prefs.age)); } catch (e) { addError(name, gpxMessage(e)); nextFile(); return; }
     const type = GPX_TYPES.indexOf(r.type) >= 0 ? r.type : 'run';
-    const it = reactive({ seq: ++seq, name: name, text: text, detected: r.info.typeHint, baseType: r.type, type: type, cache: markRaw({}), minutesTouched: false, effortTouched: false });
+    const it = reactive({ seq: ++seq, name: name, text: text, detected: r.info.typeHint, baseType: r.type, type: type, cache: markRaw({}), minutesTouched: false, effortTouched: false, held: false, dup: null });
     it.cache[r.type] = markRaw(r);
     item.value = it;
     requestFocus('review');
@@ -172,7 +177,7 @@ function createQueue() {
 
   function save(fields) {
     const it = item.value;
-    if (!it) return { ok: false, dateError: '', minutesError: '' };
+    if (!it || it.held) return { ok: false, dateError: '', minutesError: '' };
     let r;
     try { r = itemAnalysis(it); } catch (e) { return { ok: false, dateError: '', minutesError: '' }; }
     const raw = String(fields.minutes === undefined || fields.minutes === null ? '' : fields.minutes).trim(), n = Number(raw);
@@ -181,26 +186,35 @@ function createQueue() {
     const intensity = fields.intensity === 'vigorous' || fields.intensity === 'light' ? fields.intensity : 'moderate';
     const id = 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const rec = { name: (r.info.name || '').slice(0, 80), type: it.type, startTime: isNum(r.info.startTime) ? r.info.startTime : null, metrics: compactMetrics(r.metrics), track: r.track, classification: judge.value, deviceNote: r.deviceNote || null, importedAt: Date.now() };
-    item.value = null;
+    const dup = duplicate.value;
     const s = data.addSession({ date: fields.date, type: it.type, minutes: n, intensity: intensity, source: 'gpx', trackId: id });
     const stored = data.saveTrack(id, rec);
     if (!stored) { delete s.trackId; data.persist(); }
     saved.push(s.id);
     setStatus(savedMessage(s, stored));
-    if (pending.length) nextFile(); else finishBatch();
+    holdOrEnd(it, dup);
     return { ok: true };
   }
 
   function cancel() {
     const it = item.value;
-    if (!it) return;
-    item.value = null;
+    if (!it || it.held) return;
     setStatus('Skipped ' + it.name + '.');
-    if (pending.length) nextFile(); else finishBatch();
+    holdOrEnd(it, duplicate.value);
+  }
+
+  /* more files pending: the card stays on screen, inert, until the next review replaces it; otherwise the batch ends */
+  function holdOrEnd(it, dup) {
+    if (pending.length) {
+      it.dup = dup ? markRaw(dup) : null;
+      it.held = true;
+      nextFile();
+    } else finishBatch();
   }
 
   /* end of a batch: offer a link to the last saved activity's page, or send focus back to the control that started it */
   function finishBatch() {
+    item.value = null;
     if (total.value > 1) setStatus((saved.length ? 'Imported ' + saved.length + ' of ' + total.value + ' files.' : 'No files imported.') + (errors.value.length ? ' The problems are listed above.' : ''));
     const last = saved.length ? saved[saved.length - 1] : null;
     saved = [];

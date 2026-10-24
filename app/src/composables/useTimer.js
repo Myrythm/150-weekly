@@ -213,6 +213,9 @@ export function useTimer(opts) {
     stopInterval();
     clearTimeout(announceTimer);
     announceTimer = 0;
+    /* each week page mount would otherwise leave one more AudioContext open */
+    if (audio && audio.close) { try { audio.close(); } catch (e) { /* ignore */ } }
+    audio = null;
   }
 
   return {
