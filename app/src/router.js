@@ -21,6 +21,7 @@ import { COPY } from './auth/copy.js';
 import { cleanLocation, safeNext } from './auth/link.js';
 import PlaceholderPage from './pages/PlaceholderPage.vue';
 import LogPage from './pages/LogPage.vue';
+import ActivityPage from './pages/ActivityPage.vue';
 import LoginPage from './pages/auth/LoginPage.vue';
 import RegisterPage from './pages/auth/RegisterPage.vue';
 import CheckEmailPage from './pages/auth/CheckEmailPage.vue';
@@ -40,7 +41,7 @@ export function createAppRouter(pinia, opts) {
   const routes = [
     { path: '/', name: 'week', component: PlaceholderPage, meta: { auth: true } },
     { path: '/log', name: 'log', component: LogPage, meta: { auth: true, title: 'Full log, Weekly 150' } },
-    { path: '/activity/:id', name: 'activity', component: PlaceholderPage, meta: { auth: true } },
+    { path: '/activity/:id', name: 'activity', component: ActivityPage, meta: { auth: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { guest: true } },
     { path: '/register', name: 'register', component: RegisterPage, meta: { guest: true } },
     { path: '/check-email', name: 'check-email', component: CheckEmailPage, meta: { guest: true } },

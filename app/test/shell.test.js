@@ -274,7 +274,7 @@ describe('footer', function () {
 describe('app', function () {
   test('app routes get the header, live region and footer', async function () {
     const s = setup();
-    await s.router.push('/activity/s1');
+    await s.router.push('/');
     const wrapper = mount(App, { global: { plugins: [s.pinia, s.router] }, attachTo: document.body });
     await flushPromises();
     expect(wrapper.find('#wordmark').exists()).toBe(true);
