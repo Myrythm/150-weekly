@@ -200,6 +200,28 @@ describe('live region', function () {
     wrapper.unmount();
   });
 
+  test('a notice raised before the region mounts is announced once on mount', async function () {
+    vi.useFakeTimers();
+    const s = setup();
+    s.auth.announce('New password saved.');
+    await s.router.push('/');
+    const first = mount(LiveRegion, { global: { plugins: [s.pinia, s.router] }, attachTo: document.body });
+    expect(s.ui.live).toBe('');
+    await vi.advanceTimersByTimeAsync(70);
+    expect(first.find('#live').text()).toBe('New password saved.');
+    first.unmount();
+    /* a remount (route change between app and auth views) does not repeat it */
+    s.ui.live = '';
+    const second = mount(LiveRegion, { global: { plugins: [s.pinia, s.router] }, attachTo: document.body });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(s.ui.live).toBe('');
+    /* a new notice after the remount still comes through */
+    s.auth.announce('Saved.');
+    await vi.advanceTimersByTimeAsync(70);
+    expect(second.find('#live').text()).toBe('Saved.');
+    second.unmount();
+  });
+
   test('the same notice text announced twice is announced again', async function () {
     vi.useFakeTimers();
     const { wrapper, ui, auth } = await mountWith(LiveRegion, '/');

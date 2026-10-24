@@ -4,6 +4,7 @@
  *
  *   theme          'auto' | 'light' | 'dark'; read from browser localStorage (w150.theme) on creation
  *   live           text of the live region (#live)
+ *   noticeSeq      last auth notice sequence number the live region announced
  *   cycleTheme()   auto, light, dark, auto; applies data-theme on <html> and stores the choice
  *   announce(text) clear the region, then set the text after 60 ms so a screen reader repeats it
  *
@@ -36,6 +37,7 @@ export function applyTheme(theme) {
 export const useUiStore = defineStore('ui', function () {
   const theme = ref(readTheme());
   const live = ref('');
+  const noticeSeq = ref(0);   /* last auth.notice.seq the live region handled */
   let timer = null;
 
   applyTheme(theme.value);
@@ -52,5 +54,5 @@ export const useUiStore = defineStore('ui', function () {
     timer = setTimeout(function () { timer = null; live.value = String(text || ''); }, ANNOUNCE_DELAY_MS);
   }
 
-  return { theme, live, cycleTheme, announce };
+  return { theme, live, noticeSeq, cycleTheme, announce };
 });
