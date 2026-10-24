@@ -7,6 +7,7 @@ export const COPY = {
   emailNotConfirmed: "Email not verified yet.",
   rateLimited: "Too many attempts. Try again in a few minutes.",
   recoverSent: "If that account exists, we sent an email.",
+  serverError: "Something went wrong. Try again.",
 } as const;
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
@@ -108,30 +109,42 @@ export async function countAttempts(
   return count ?? 0;
 }
 
-export async function recordAttempt(admin: SupabaseClient, bucket: string): Promise<void> {
-  const { error } = await admin.from("auth_attempts").insert({ bucket });
-  if (error) throw new Error("auth_attempts insert failed: " + error.message);
+// Inserts one attempt row and returns its id. Throws on database errors.
+export async function recordAttempt(admin: SupabaseClient, bucket: string): Promise<number> {
+  const { data, error } = await admin.from("auth_attempts").insert({ bucket }).select("id").single();
+  if (error || !data) throw new Error("auth_attempts insert failed: " + (error?.message ?? "no row"));
+  return data.id as number;
 }
 
-// True when the bucket already holds max attempts in the window (check before attempting).
-export async function isLimited(
-  admin: SupabaseClient,
-  bucket: string,
-  max: number,
-  windowMinutes: number,
-): Promise<boolean> {
-  return (await countAttempts(admin, bucket, windowMinutes)) >= max;
+// Deletes reserved attempt rows by id, so the attempt no longer counts.
+export async function releaseAttempts(admin: SupabaseClient, ids: number[]): Promise<void> {
+  if (!ids.length) return;
+  const { error } = await admin.from("auth_attempts").delete().in("id", ids);
+  if (error) throw new Error("auth_attempts release failed: " + error.message);
 }
 
 // Records one attempt, then returns true when the count in the window exceeds max.
+// The row is committed before counting, so concurrent requests always see each other:
+// of any max + 1 requests in one window, the last to count sees all of them.
 export async function hitRateLimit(
   admin: SupabaseClient,
   bucket: string,
   max: number,
   windowMinutes: number,
 ): Promise<boolean> {
-  await recordAttempt(admin, bucket);
-  return (await countAttempts(admin, bucket, windowMinutes)) > max;
+  return (await reserveAttempt(admin, bucket, max, windowMinutes)).limited;
+}
+
+// Like hitRateLimit, but also returns the reserved row id so it can be released later.
+export async function reserveAttempt(
+  admin: SupabaseClient,
+  bucket: string,
+  max: number,
+  windowMinutes: number,
+): Promise<{ id: number; limited: boolean }> {
+  const id = await recordAttempt(admin, bucket);
+  const limited = (await countAttempts(admin, bucket, windowMinutes)) > max;
+  return { id, limited };
 }
 
 // Resolves a username to the account email strictly through public.profiles

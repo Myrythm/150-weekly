@@ -114,8 +114,9 @@ async function waitForMail(email, timeoutMs) {
   }
 }
 
-test.before(async function () {
-  // Clear the attempts log so reruns within 15 minutes do not trip the IP buckets.
+test.beforeEach(async function () {
+  // Clear the attempts log before every test, so no test (or rerun within 15 minutes)
+  // inherits rows that push it toward the IP buckets.
   const res = await fetch(API_URL + '/rest/v1/auth_attempts?id=gt.0', {
     method: 'DELETE', headers: serviceHeaders()
   });
@@ -188,6 +189,32 @@ test('rate limit', async function () {
   const r = await login(u.username, 'wrong-11');
   assert.equal(r.status, 429, r.text);
   assert.deepEqual(r.body, { error: 'rate_limited', message: RATE_LIMITED });
+});
+
+test('rate limit holds under concurrent guesses', async function () {
+  const u = await newUser('burst', true);
+  const results = await Promise.all(Array.from({ length: 15 }, function (_, i) {
+    return login(u.username, 'wrong-burst-' + i);
+  }));
+  const statuses = results.map(function (r) { return r.status; });
+  const fails = statuses.filter(function (s) { return s === 401; }).length;
+  const limited = statuses.filter(function (s) { return s === 429; }).length;
+  assert.equal(fails + limited, 15, 'unexpected statuses: ' + statuses.join(','));
+  assert.ok(fails <= 10, fails + ' wrong passwords were checked, max is 10');
+  assert.ok(limited >= 5, 'statuses: ' + statuses.join(','));
+});
+
+test('correct passwords do not use up the limit', async function () {
+  const ok = await newUser('okrep', true);
+  const unver = await newUser('unrep', false);
+  for (let i = 1; i <= 11; i++) {
+    const a = await login(ok.username, ok.password);
+    assert.equal(a.status, 200, 'login ' + i + ': ' + a.text);
+    const b = await login(unver.username, unver.password);
+    assert.equal(b.status, 403, 'unverified login ' + i + ': ' + b.text);
+  }
+  const wrong = await login(ok.username, 'wrong-after');
+  assert.equal(wrong.status, 401, wrong.text);
 });
 
 test('recover is neutral', async function () {
