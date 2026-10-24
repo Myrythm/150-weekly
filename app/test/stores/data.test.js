@@ -94,7 +94,9 @@ test('clearAll keeps the age and deletes every server key including w150.breaks'
     'w150.tracks': {}
   });
   store.load();
+  expect(store.clearSeq).toBe(0);
   store.clearAll();
+  expect(store.clearSeq).toBe(1);
   expect(fake.map.has('w150.breaks')).toBe(false);
   expect(fake.map.has('w150.sessions')).toBe(false);
   expect(fake.map.has('w150.plan')).toBe(false);

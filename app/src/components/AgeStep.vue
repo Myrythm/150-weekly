@@ -27,6 +27,11 @@ watch(function () { return ui.askingAge; }, function (on) {
   error.value = false;
 });
 watch(function () { return data.prefs.age; }, function (a) { value.value = a === null ? '' : String(a); });
+/* Clear all keeps the age: the field shows it again and an old error goes (clearAllData) */
+watch(function () { return data.clearSeq; }, function () {
+  value.value = data.prefs.age === null ? '' : String(data.prefs.age);
+  error.value = false;
+});
 
 function focusInput() {
   try { step.value.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'nearest' }); } catch (e) { /* ignore */ }

@@ -125,6 +125,12 @@ function onSubmit() {
   nextTick(function () { if (minutesEl.value) minutesEl.value.focus(); });
 }
 
+/* Clear all empties the status line and the minutes error (clearAllData) */
+watch(function () { return data.clearSeq; }, function () {
+  status.value = '';
+  minutesError.value = false;
+});
+
 function focusActivity() {
   if (activityEl.value) activityEl.value.focus({ preventScroll: true });
 }

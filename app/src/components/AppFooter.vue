@@ -1,6 +1,6 @@
 <script setup>
 /* The week page footer (guideline line, storage line, disclaimer, and a slot for the Clear all
-   controls that come with the week page) on `/`; the short footer of log.html and activity.html
+   controls, which App.vue fills with ClearAll) on `/`; the short footer of log.html and activity.html
    elsewhere. The guideline line follows the age like applyGuide in web/js/app.js. */
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';

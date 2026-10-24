@@ -7,6 +7,7 @@ import { useUiStore } from './stores/ui.js';
 import AuthLayout from './pages/auth/AuthLayout.vue';
 import AppHeader from './components/AppHeader.vue';
 import AppFooter from './components/AppFooter.vue';
+import ClearAll from './components/ClearAll.vue';
 import LiveRegion from './components/LiveRegion.vue';
 
 const auth = useAuthStore();
@@ -40,6 +41,8 @@ onBeforeUnmount(function () {
     <AppHeader />
     <LiveRegion />
     <router-view />
-    <AppFooter />
+    <AppFooter>
+      <template #actions><ClearAll /></template>
+    </AppFooter>
   </template>
 </template>

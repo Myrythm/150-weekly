@@ -2,7 +2,7 @@
 /* This week's splits (web/index.html #splits; renderSplits, renderEarlier, removeSession and
    undoRemove on the week page). The `import` slot is where the GPX import controls go: the drop bar
    (#gpx-bar), its messages and the review form. */
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useDataStore } from '../stores/data.js';
 import { actLabel, isStrength, isLight, TYPE_LABEL } from '../core/rules.js';
 import { ymd, addDays, fmtDay } from '../core/dates.js';
@@ -45,6 +45,9 @@ const earlier = computed(function () {
       };
     });
 });
+
+/* Clear all removes the sessions, so a pending Undo has nothing to restore */
+watch(function () { return data.clearSeq; }, function () { if (undoBar.value) undoBar.value.hide(); });
 
 function onRemove(id) {
   const result = data.removeSession(id);

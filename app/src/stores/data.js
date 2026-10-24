@@ -7,6 +7,7 @@
  *   attach(syncStore)   the store to read and write: { get(key, fallback), set(key, value), remove(key) }
  *   load()              read every key (also after a remote change); seeds the sample on a new account
  *   tick()              move `today` to the current local midnight (day rollover)
+ *   clearSeq            goes up on every clearAll(): page parts that hold their own state reset when it changes
  *
  * `today` is a Date at local midnight; every getter and action computes with it, never with a
  * fresh new Date(), so tests can pin the date. UI work (toasts, focus, timers, forms) stays out.
@@ -36,6 +37,7 @@ export const useDataStore = defineStore('data', () => {
   const prefs = ref(defaultPrefs());   /* age: whole years 0 to 120, or null until asked; nudge: kept for older saves */
   const tracks = ref({});              /* imported GPX details by trackId (w150.tracks) */
   const today = ref(todayDate());
+  const clearSeq = ref(0);             /* up by one on every clearAll(); week page parts with their own state watch it and reset */
 
   const group = computed(() => ageGroup(prefs.value.age));
   const guide = computed(() => activeGuide(prefs.value.age));
@@ -160,6 +162,7 @@ export const useDataStore = defineStore('data', () => {
     [KEYS.meta, KEYS.sessions, KEYS.plan, KEYS.prefs, KEYS.breaks, KEYS.tracks].forEach(removeKey);
     save(KEYS.meta, meta.value);
     save(KEYS.prefs, prefs.value);
+    clearSeq.value++;
   }
 
   function setAge(age) {
@@ -206,7 +209,7 @@ export const useDataStore = defineStore('data', () => {
   }
 
   return {
-    ready, meta, sessions, plan, prefs, tracks, today,
+    ready, meta, sessions, plan, prefs, tracks, today, clearSeq,
     group, guide, summary,
     attach, load, persist, addSession, removeSession, restoreSession, clearSample, clearAll,
     setAge, setSound, savePlan, deletePlan, saveTrack, tick
