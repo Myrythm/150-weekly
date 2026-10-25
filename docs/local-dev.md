@@ -1,11 +1,11 @@
 # Local development (web version)
 
-The web app is a Vue 3 app in `app/` (Vite, Vue Router, Pinia) and talks to a Supabase stack that runs in Docker on this machine. The Artifact `weekly-150.html` is frozen at v5 and is not part of this setup.
+The web app is a Vue 3 app in `app/` (Vite, Vue Router, Pinia) and talks to a Supabase stack that runs in Docker on this machine.
 
 ## Prerequisites
 
 - Docker Desktop, running. The first `npm run db:start` pulls about a dozen images and can take a long time when the registry rate limits.
-- Node 22.12 or newer (Node 24 is what the project is developed on; Vite 8 and Vitest 5 need at least 22.12). No Python is needed for the web app. Only the Artifact preview server (`weekly150-preview`) still uses Python.
+- Node 22.12 or newer (Node 24 is what the project is developed on; Vite 8 and Vitest 5 need at least 22.12). No Python is needed.
 - Free ports: 54321 (API), 54322 (database), 54323 (Studio), 54324 (Mailpit), 54327 (analytics), 8160 (Vite dev server). Another local Supabase project on the default ports must be stopped first.
 
 ## First run

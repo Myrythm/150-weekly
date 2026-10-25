@@ -4,21 +4,18 @@ Last updated: 2026-10-25. Read this first in a new session, then the files it po
 
 ## What this is
 
-Weekly 150 is a single-page web app that gets people to exercise regularly. It works as a pocket training log built around the WHO 2020 physical activity guideline. It is one self-contained HTML file, `weekly-150.html`, published as a private claude.ai Artifact:
+Weekly 150 is a single-page web app that gets people to exercise regularly. It works as a pocket training log built around the WHO 2020 physical activity guideline. It is a Vue 3 app in `app/` with Supabase accounts. It started as a single-file claude.ai Artifact (versions v1 to v5); that file was removed from the repo on 2026-10-25 and lives only in git history.
 
-- Live page: https://claude.ai/artifact/BLA3m85d4r3qry7wFm4UTa (version 5 is current)
 - Visual identity: a track meet. Paper race bib, blue track band with lane lines, results-sheet tables. Fonts: Barlow Condensed (display), Barlow (body), IBM Plex Mono (labels and numbers).
-- In the Artifact, all user data lives in the visitor's browser (localStorage). There is no backend. The web version (see "Web version") adds accounts and a Supabase backend.
 
 ## Status at a glance
 
 | Part | State |
 |---|---|
-| Artifact `weekly-150.html` | Frozen at v5. Published, no backend, data in the visitor's browser. Not edited any more. |
 | Web version `app/` | A Vue 3 app (Vite, Vue Router, Pinia, Vitest) on branch `feat/vue-migration`, verified locally on the Supabase CLI Docker stack. It replaces the old vanilla `web/` folder, which was deleted at the cutover (log entry L, Task 12; the old code stays in git history). Accounts, per-user data, GPX import, all rules as in the Artifact; Sit less removed, every session kept (no 120 day cut), Full log page and Activity page (log entry K). **Not deployed yet.** |
 | Deploy | `vercel.json` (npm ci, `npm run app:build`, output `app/dist`, SPA rewrite) and `docs/deploy.md` are ready; nothing has been executed (no Supabase cloud project, no Vercel project, no SMTP). |
 
-The feature list further down is the Artifact's; the web version ports its script into Vue modules and differs in three ways (log entry K): no Sit less section, every session is kept on the server (the Artifact keeps 120 days), and two more pages: the full log (`app/src/pages/LogPage.vue`, URL `/log`) lists every week, newest first, with a year filter, paging and Remove with Undo, and each GPX activity has its own page (`app/src/pages/ActivityPage.vue`, URL `/activity/<sessionId>?from=week|log`). The web-specific parts (accounts, storage on the server, functions, tests) are in this section.
+The feature list further down was first built in the Artifact (v1 to v5); the web version ports it into Vue modules and differs in three ways (log entry K): no Sit less section, every session is kept on the server (the Artifact kept 120 days), and two more pages: the full log (`app/src/pages/LogPage.vue`, URL `/log`) lists every week, newest first, with a year filter, paging and Remove with Undo, and each GPX activity has its own page (`app/src/pages/ActivityPage.vue`, URL `/activity/<sessionId>?from=week|log`). The web-specific parts (accounts, storage on the server, functions, tests) are in this section.
 
 ## Web version (app/)
 
@@ -84,7 +81,7 @@ The feature list further down is the Artifact's; the web version ports its scrip
 - Logout signs out this device only. The display name shows on the race bib at every width and in the header from 1100px.
 - Local `config.toml` raises `email_sent` to 60 and `sign_in_sign_ups` to 300 for testing only. The cloud needs custom SMTP, the default `email_sent`, and a raised `sign_in_sign_ups`, because every login comes from the function's one egress IP (see `docs/deploy.md`).
 - The Supabase stack uses the default 543xx ports; another local Supabase project on those ports must be stopped first.
-- `weekly150-web` runs `npm run app:dev` (Vite on 8160). `weekly150-preview` (Artifact) still uses python, which is not on PATH on every machine.
+- `weekly150-web` runs `npm run app:dev` (Vite on 8160).
 - Functions are served locally with `npm run functions:serve`; the stack that was running during the build started before the function folders existed and did not serve them.
 
 ### How to run and verify the web app
@@ -109,26 +106,23 @@ The feature list further down is the Artifact's; the web version ports its scrip
 - Smaller deferred review notes: the store reports `error` both for retrying and for auth-held writes; a second `refreshAuth` call if the immediate retry gets 401 again; `remove()` is an unconditional delete (the app never removes the sessions key); `store.start()` swallows a synchronous throw without backoff; `opts.now` in the store is unused; a null value in a conflict reply means both "row missing" and "row holds JSON null" (the version tells them apart); display name may contain control characters (the app uses `textContent`); GoTrue codes other than `invalid_credentials` (banned, throttled) answer 500 for a known account but 401 for an unknown one; `reserveAttempt` leaks its row if `countAttempts` throws (fails closed); a failed release on the 200 or 403 path returns 500 (fails closed); recovery buckets split by identifier form (6 emails per 15 minutes per account); the `seed.sql` pattern in `config.toml` points at a missing file (harmless warning); a stale template comment above `email_sent`; the sticky header is two rows (about 101px) below 720px; no automated test for `loadState`, `reload` or `clearAllData`.
 - The local database was reset in the final fix wave (global version sequence); the smoke users and the `fx_...` account from that browser check stay in it until the next `npm run db:reset`.
 
-## Artifact (weekly-150.html, frozen at v5)
+## Features, history and shared notes
 
-Everything below describes the Artifact and the features both forms share. The Artifact still stores data in localStorage; the web version stores the same keys on the server as described above.
+Everything below describes the features as first built in the Artifact (removed from the repo) and still present in the web app unless noted. The web app stores the same keys on the server as described above.
 
 ## Files
 
 | Path | What it is |
 |---|---|
-| `weekly-150.html` | The whole app (HTML, CSS, JS in one file, about 250 KB). This is what gets published. |
 | `docs/PROGRESS.md` | This file. |
-| `docs/page-contract.md` | Hosting rules the page must obey (CSP, no html/head/body tags, theme tokens, 400px, storage). Read before editing. |
 | `docs/design-spec.md` | Original design spec (tokens, sections, copy, components, wireframes). The page has grown past it; the implementation log is newer. |
 | `docs/implementation-log.md` | Detailed notes for every change A to H: functions, element ids, storage, decisions. The best map of the code. |
 | `docs/research.md` | Cited health facts and guidelines (with confidence notes). |
 | `docs/gpx-research.md` | Sources for the moderate vs vigorous thresholds used by GPX import (HR % of max, speed per activity). |
-| `tools/gpx/gpx-lib.js` | GPX parser and metrics module, the single source. It is pasted verbatim inside the Artifact script (marker comment "GPX parser and metrics: gpx-lib.js, pasted verbatim"); the web build copies it to `app/public/gpx-lib.js`. If the Artifact were ever changed again, change both copies. |
+| `tools/gpx/gpx-lib.js` | GPX parser and metrics module, the single source. The web build copies it to `app/public/gpx-lib.js`. |
 | `tools/gpx/gpx-lib.test.js` | Node tests for the parser (`node tools/gpx/gpx-lib.test.js`; 50 passed with the real file below, 42 passed and 1 skipped without it). Uses the real file plus fixtures. |
 | `tools/gpx/fixtures/`, `tools/gpx/make-fixtures.js` | Synthetic GPX test files (Garmin HR/ele, Strava ride with power, open-water swim, route only, pool swim, not GPX, spike) and their seeded generator. |
-| `tools/build-preview.sh` | Wraps the page in the host's doctype skeleton into `.claude/preview/`, runs `node --check`, counts dashes. |
-| `.claude/launch.json` | Preview server config `weekly150-preview` (python http.server on port 8150 serving `.claude/preview`). |
+| `.claude/launch.json` | Dev server config `weekly150-web` (`npm run app:dev`, Vite on 127.0.0.1:8160). |
 | `20261006Outdoor running_01 (1).gpx` | Real Mi Fitness export from the user (private, git-ignored, not in the repo). See the GPX notes below. |
 
 ## Version history
@@ -139,7 +133,7 @@ Everything below describes the Artifact and the features both forms share. The A
 | v2 | Quick-minute chips in one row, streak message counts down from logged minutes, Lally 2010 wording ("typically" 66 days). |
 | v3 | Guideline audit fixes A to F (see below). |
 | v4 | Fix G: balance days need moderate effort or more. |
-| v5 | Fix H: GPX import, review card, activity detail view. Artifact frozen here. |
+| v5 | Fix H: GPX import, review card, activity detail view. Last Artifact version (the file was removed from the repo on 2026-10-25). |
 | web I | Web version with accounts (Supabase, Vercel). See "Web version" and log entry I. Not deployed yet. |
 | web J | Final review fixes: global version sequence (no ABA after Clear all), one sample on a new account, quiet server wins without a local edit, SRI on supabase-js, sign-up 500 asks before saying "Username taken.", deploy note on `AUTH_REDIRECT_ORIGINS`. See log entry J. |
 | web K | Sit less removed from the web app; sessions no longer cut at 120 days, GPX imports up to 5 years back; separate pages `log.html` (`/log`, from "See the full log" and "Full log" in the header) and `activity.html` (`/activity?id=`, from every Details link); auth screens shared through `auth-screens.js`. See log entry K. |
@@ -154,7 +148,7 @@ Everything below describes the Artifact and the features both forms share. The A
 2. **Strength counted separately (B).** Strength sessions count as muscle days only, never as aerobic minutes.
 3. **Light activity (C).** Light effort can be logged and is shown, but never counts toward the target.
 4. **Balance for 65+ (D, G).** "Balance days: N of 3", activities Balance or tai chi and Dance, a "this session included balance work" checkbox, the "Steady feet" routine. A session counts only at moderate effort or more.
-5. **Sit less (E).** WHO sedentary advice per age group, "I got up and moved" counter (per day, own storage key), optional nudge every 30 minutes while the page is open. Artifact only: removed from the web version (log entry K); `w150.breaks` is no longer read or written there, Clear all still deletes it.
+5. **Sit less (E).** WHO sedentary advice per age group, "I got up and moved" counter (per day, own storage key), optional nudge every 30 minutes while the page is open. Removed from the web version (log entry K); `w150.breaks` is no longer read or written there, Clear all still deletes it.
 6. **Stretch goal (F).** After 150, adults and 65+ see progress toward 300.
 7. **GPX import (H).**
    - Import GPX button and drop zones, several files at once.
@@ -164,7 +158,7 @@ Everything below describes the Artifact and the features both forms share. The A
    - Imports from other weeks appear under "Earlier imports".
 8. **Always there:** sample data on first visit (clearly marked, cleared by the first real entry), Undo on remove, inline confirms, theme toggle Auto/Light/Dark, 400px layout.
 
-## Storage (localStorage, all through try/catch helpers `load()` / `save()`)
+## Storage keys and shapes (on the server, see "Storage" above; `w150.theme` in localStorage)
 
 | Key | Shape |
 |---|---|
@@ -182,29 +176,21 @@ Key functions: `calc()`, `credit()`, `isStrength()`, `isLight()`, `isBalance()`,
 
 - The real Mi Fitness file has lat, lon and time only (no ele, HR, cadence). Its header says `totalDistance` 5052 m but the points add up to 2.02 km in 13:27 (6:39 /km). The file name ends in `_01`, so it is probably one part of a split export. The page computes from the points and shows a note.
 - Its start time is 18:48 UTC, which is Wed 7 Oct 01:48 in UTC+7, so it lands on 7 Oct (date is editable in the review card).
-- Thresholds (`GPX_THRESHOLDS` in the page): HR moderate 64 to 76% of max, vigorous 77%+, max HR 220 minus age (Tanaka 208 minus 0.7 x age under 18). Speed: walk 4.0 / 7.2 km/h, run 4.2 / 6.4, cycle 16.1 vigorous, swim crawl 1.6 / 2.6, open water vigorous. The CDC HR percentages are Secondary (taken from a search excerpt).
+- Thresholds (`GPX_THRESHOLDS` in `app/src/core/gpxEffort.js`): HR moderate 64 to 76% of max, vigorous 77%+, max HR 220 minus age (Tanaka 208 minus 0.7 x age under 18). Speed: walk 4.0 / 7.2 km/h, run 4.2 / 6.4, cycle 16.1 vigorous, swim crawl 1.6 / 2.6, open water vigorous. The CDC HR percentages are Secondary (taken from a search excerpt).
 - Pool swims without GPS points are rejected with a plain message.
 
 ## Open items and ideas for the shared features (not done)
 
 - Daily steps logging (Saint-Maurice 2020 fact is shown, but steps cannot be entered).
 - A habit plan like "do 10 squats" is stored as type `habit` and does not count as a strength day.
-- Not tested: a real file picker and a real drag from the desktop, Safari and iOS, screen readers, the published host on a phone.
+- Not tested: a real file picker and a real drag from the desktop, Safari and iOS, screen readers, a deployed host on a phone.
 - The full 1280px desktop layout was mostly checked by DOM measurement (the Browser pane is narrow), not by eye.
 - Evidence to verify against the original papers before sharing publicly: Wen 2011 (14%, about 3 years) and O'Donovan 2017 weekend warrior (shown qualitatively).
 - Balance days: yoga counts for 65+ even though its label is "Yoga or stretching".
 
-## How to work on the Artifact (frozen; only if it is ever reopened)
-
-1. Read `docs/page-contract.md` and the relevant part of `docs/implementation-log.md`.
-2. Edit `weekly-150.html`. Keep tokens (every colour defined in all three token blocks), stable ids, existing localStorage keys (add fields with defaults, never rename), and `credit()` as the single route for aerobic minutes.
-3. Verify: `bash tools/build-preview.sh`, then start the `weekly150-preview` server and test in the Browser pane at 375px and desktop, light and dark. If the parser changed: `cd tools/gpx && node gpx-lib.test.js`.
-4. Publish to the same URL. In a new conversation, first read the artifact (`Artifact` action `read` with the URL above), then publish `weekly-150.html` with that `url` so the link stays the same.
-5. Append a short entry to `docs/implementation-log.md` and update this file.
-
 ## Working conventions from the user
 
-- Delegate work to sub-agents by difficulty, assessed first: difficult tasks to Opus, moderate to Sonnet, low to Haiku. Run agents that edit `weekly-150.html` one at a time (same file); independent work (research, standalone modules) can run in parallel. Verify their results yourself before publishing.
+- Delegate work to sub-agents by difficulty, assessed first: difficult tasks to Opus, moderate to Sonnet, low to Haiku. Run agents that edit the same file one at a time; independent work (research, standalone modules) can run in parallel. Verify their results yourself.
 - No em dashes or en dashes anywhere (copy, code comments, commits, docs).
 - No Claude or Anthropic attribution in commits or docs.
 - The user writes in Indonesian; reply in Indonesian.
