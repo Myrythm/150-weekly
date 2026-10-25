@@ -4,7 +4,7 @@ Not executed yet. This is the checklist for the first deploy. Replace `<domain>`
 
 ## 1. Push the repository
 
-The project is a git repository (branch `feat/web-supabase`). Push it to a Git host that Vercel can read (for example GitHub). Make sure nothing secret is tracked: `.env`, `supabase/functions/.env`, `web/config.js`, `web/js/gpx-lib.js` and the private GPX file are git-ignored.
+The project is a git repository (branch `feat/vue-migration`). Push it to a Git host that Vercel can read (for example GitHub). Make sure nothing secret is tracked: `.env`, `supabase/functions/.env`, `app/.env.local`, `app/public/gpx-lib.js`, `app/dist/` and the private GPX file are git-ignored.
 
 ## 2. Create and link the Supabase project
 
@@ -21,7 +21,7 @@ The project is a git repository (branch `feat/web-supabase`). Push it to a Git h
    npx supabase secrets set AUTH_REDIRECT_ORIGINS=https://<domain>
    ```
    Add the preview or custom domains too if they must work (`https://<domain>,https://www.<domain>`). A mixed-case value will not match the browser's lowercase origin. If `AUTH_REDIRECT_ORIGINS` is not set, the functions fall back to the local origins (`http://127.0.0.1:8160,http://localhost:8160`) and recovery requests from the real domain answer 400.
-6. Later, for the AI assistant: `npx supabase secrets set OPENAI_API_KEY=...`. It is a function secret only and must never appear in `web/` or in a committed file.
+6. Later, for the AI assistant: `npx supabase secrets set OPENAI_API_KEY=...`. It is a function secret only and must never appear in `app/` or in a committed file.
 
 ## 3. Auth settings (dashboard, Authentication)
 
@@ -34,9 +34,11 @@ The project is a git repository (branch `feat/web-supabase`). Push it to a Git h
 
 ## 4. Vercel project
 
-1. Import the repository. Framework preset: Other. `vercel.json` already sets `framework: null`, an empty install command, build command `node tools/web/build.js`, output directory `web`, and clean URLs.
+1. Import the repository. Framework preset: Other. `vercel.json` already sets `framework: null`, install command `npm ci`, build command `npm run app:build`, output directory `app/dist`, and a rewrite of every path to `/index.html` (the app is a single page app: `/log` and `/activity/<id>` are handled by Vue Router, so a reload or a direct URL must get `index.html`; real files such as `/assets/...` and `/gpx-lib.js` are still served first).
+   - Node version: Vite 8 and Vitest 5 need Node 22.12 or newer (`engines` in `package.json`). In the Vercel project settings (General, Node.js Version) choose 22.x or 24.x.
+   - Vercel installs dev dependencies by default, and the build tools (`vite`, `@vitejs/plugin-vue`) are dev dependencies, so leave that as it is: do not set `NPM_CONFIG_PRODUCTION=true` or `NODE_ENV=production` for the install.
 2. Environment variables (Production and Preview): `SUPABASE_URL` (the project URL, `https://<project-ref>.supabase.co`) and `SUPABASE_ANON_KEY` (the anon or publishable key from Project Settings, API).
-3. The build writes `web/config.js` from those two variables and copies `tools/gpx/gpx-lib.js` to `web/js/gpx-lib.js`. It exits non-zero when a variable is missing, and refuses a `sb_secret_` key or a JWT whose role is not `anon`. Never set the service role key in Vercel.
+3. `npm run app:build` first runs `node tools/web/build.js`, which writes `app/.env.local` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) from those two variables and copies `tools/gpx/gpx-lib.js` to `app/public/gpx-lib.js`, then `vite build` bundles the app into `app/dist` with the URL and anon key inlined. The build step exits non-zero when a variable is missing, and refuses a `sb_secret_` key or a JWT whose role is not `anon`. Never set the service role key in Vercel. After a build, `grep -rE "service_role|SERVICE_ROLE" app/dist` must find nothing.
 4. Deploy, then open `https://<domain>` and run the checks below.
 
 ## 5. Security follow-ups to settle after the first deploy

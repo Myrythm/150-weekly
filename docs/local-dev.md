@@ -1,12 +1,12 @@
 # Local development (web version)
 
-The web app lives in `web/` and talks to a Supabase stack that runs in Docker on this machine. The Artifact `weekly-150.html` is frozen at v5 and is not part of this setup.
+The web app is a Vue 3 app in `app/` (Vite, Vue Router, Pinia) and talks to a Supabase stack that runs in Docker on this machine.
 
 ## Prerequisites
 
 - Docker Desktop, running. The first `npm run db:start` pulls about a dozen images and can take a long time when the registry rate limits.
-- Node 24 (the test script and `tools/web/serve.js` need it). No Python is needed for the web app. Only the Artifact preview server (`weekly150-preview`) still uses Python.
-- Free ports: 54321 (API), 54322 (database), 54323 (Studio), 54324 (Mailpit), 54327 (analytics), 8160 (web). Another local Supabase project on the default ports must be stopped first.
+- Node 22.12 or newer (Node 24 is what the project is developed on; Vite 8 and Vitest 5 need at least 22.12). No Python is needed.
+- Free ports: 54321 (API), 54322 (database), 54323 (Studio), 54324 (Mailpit), 54327 (analytics), 8160 (Vite dev server). Another local Supabase project on the default ports must be stopped first.
 
 ## First run
 
@@ -16,10 +16,12 @@ npm run db:start
 npm run web:build:local
 ```
 
-Then, in a second terminal, serve the Edge Functions (see below), and start the `weekly150-web` server from `.claude/launch.json` (it runs `node tools/web/serve.js`, a static server for `web/` on http://127.0.0.1:8160). Open http://127.0.0.1:8160.
+Then, in a second terminal, serve the Edge Functions (see below), and start the `weekly150-web` server from `.claude/launch.json` (it runs `npm run app:dev`, the Vite dev server on http://127.0.0.1:8160 with hot reload; the port is strict, so it fails when something else holds 8160). Open http://127.0.0.1:8160. Paths like `/log` and `/activity/<id>` work by reload and by direct URL, because Vite serves `index.html` for them.
 
 - `npm install` pins the Supabase CLI (`supabase` 2.122.0) as a dev dependency. Use it through `npx supabase ...` or the npm scripts.
-- `npm run web:build:local` runs `node tools/web/build.js --local`. It reads `API_URL` and `ANON_KEY` from `npx supabase status -o env` and writes `web/config.js`, and it copies `tools/gpx/gpx-lib.js` to `web/js/gpx-lib.js`. Both outputs are git-ignored. Rerun it after every `tools/gpx/gpx-lib.js` change and after `db:reset` or any change of keys.
+- `npm run web:build:local` runs `node tools/web/build.js --local`. It reads `API_URL` and `ANON_KEY` from `npx supabase status -o env` and writes `app/.env.local` (`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`), and it copies `tools/gpx/gpx-lib.js` to `app/public/gpx-lib.js`, which `app/index.html` loads as a classic script. Both outputs are git-ignored. Rerun it after every `tools/gpx/gpx-lib.js` change and after `db:reset` or any change of keys, then restart the dev server (Vite reads `.env.local` at start).
+- `npm run app:build:local` runs `node tools/web/build.js --local` and then `vite build` into `app/dist`, so it needs only the local stack (like `web:build:local`). Use it to check that the production build passes on your machine.
+- `npm run app:build` is the Vercel and cloud build: it runs the build step without `--local`, so it needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the environment or `.env` and exits 1 without them. It also rewrites `app/.env.local` from those values. If you run it locally, rerun `npm run web:build:local` afterwards to restore `app/.env.local` for the local stack, then restart the dev server; otherwise the dev server talks to the cloud project.
 - The build refuses a `SUPABASE_ANON_KEY` that starts with `sb_secret_` or that is a JWT whose `role` is not `anon`. Only the URL and anon key may reach the browser.
 
 ## Useful URLs
@@ -47,7 +49,7 @@ Username login and recovery run as Supabase Edge Functions in `supabase/function
 
 | Command | What it covers | Needs |
 |---|---|---|
-| `npm test` | Unit tests for the store and merge modules (`web/test/*.test.js`), then `node tools/gpx/gpx-lib.test.js` | nothing running |
+| `npm test` | The Vitest suite in `app/test` (`npm run app:test`: core rules, sync store and merge, stores, router, pages and components), then `node tools/gpx/gpx-lib.test.js` | nothing running |
 | `npm run db:test` | pgTAP tests of the schema, trigger, RLS and RPCs (`supabase/tests/accounts.test.sql`, rolled back, leaves no data) | stack up |
 | `npm run test:smoke` | End to end against the stack: login, rate limits, recovery, CORS headers, RLS across users, no email leak (`tools/web/smoke.test.js`) | stack up and `functions:serve` running |
 
@@ -55,7 +57,7 @@ Notes:
 
 - The gpx test reports 42 passed and 1 skipped in a fresh checkout. The real Mi Fitness file (`20261006Outdoor running_01 (1).gpx`, private and git-ignored) is not in the repo; with it the count is 50 passed.
 - The smoke suite clears `public.auth_attempts` before each test, so reruns do not trip the rate limits. It creates users with random suffixes and leaves them in the local database.
-- Browser check: after the tests, open the app on `weekly150-web`, register, verify through Mailpit, log in, log a session, reload, check at 375px and desktop in light and dark.
+- Browser check: after the tests, open the app on `weekly150-web`, register, verify through Mailpit, log in, log a session, reload, open `/log` and `/activity/<id>` by direct URL while logged out (log in, then you land back on that page), check at 375px and desktop in light and dark.
 
 ## Reset and stop
 
