@@ -86,7 +86,7 @@ The feature list further down was first built in the Artifact (v1 to v5); the we
 
 ### How to run and verify the web app
 
-1. `npm install` (Node 22.12 or newer), `npm run db:start`, `npm run web:build:local`, `npm run functions:serve` (second terminal), start `weekly150-web` (`npm run app:dev`, 127.0.0.1:8160). See `docs/local-dev.md`.
+1. Shortcut: after `npm install`, `npm run dev` does everything below in one terminal (Docker Desktop must be running). By hand: `npm install` (Node 22.12 or newer), `npm run db:start`, `npm run web:build:local`, `npm run functions:serve` (second terminal), start `weekly150-web` (`npm run app:dev`, 127.0.0.1:8160). See `docs/local-dev.md`.
 2. `npm test`: the Vitest suite in `app/test`, then the gpx tests. In this checkout gpx shows **42 passed and 1 skipped**: the real Mi Fitness file is not in the repo, so the "50 passed" count needs the owner's private file. This is not a regression.
 3. `npm run db:test` (pgTAP, 71 assertions) and `npm run test:smoke` (14 tests, needs `functions:serve`). `npm run app:build:local` must exit 0 (it builds against the local stack). `npm run app:build` is the Vercel and cloud build: it needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the environment or `.env` and rewrites `app/.env.local`; after running it locally, rerun `npm run web:build:local` to restore `app/.env.local`.
 4. Browser check on http://127.0.0.1:8160 (Mailpit at http://127.0.0.1:54324): register, verify, log in, log a session, reload; `/log` and `/activity/<id>` by reload and by direct URL while logged out (log in, then back to that page); Back to this week scrolls to the table; GPX import, clear all, forgot password; at 375px and desktop, light and dark.

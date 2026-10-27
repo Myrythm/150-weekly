@@ -288,3 +288,8 @@ Branch `feat/vue-migration` (from `feat/full-log-pages`). Plan: `docs/superpower
 ## M. Artifact removed from the repo
 
 Owner request (2026-10-25): only the web app stays. Deleted `weekly-150.html` (the single-file claude.ai Artifact, frozen at v5), `docs/page-contract.md` (its hosting rules), `tools/build-preview.sh` (its preview wrapper) and the `weekly150-preview` launch configuration. The published claude.ai Artifact link itself was not touched. `tools/gpx/gpx-lib.js` stays the single source of the parser for the web app (no longer pasted anywhere else). CLAUDE.md, `docs/PROGRESS.md` and `docs/local-dev.md` no longer describe the Artifact as a second form; history entries A to H above still describe how it was built and the old file is in git history (for example `git show b07b138:weekly-150.html`).
+
+
+## N. One command dev (`npm run dev`)
+
+Owner request (2026-10-27): start everything with `npm run dev`. New `tools/web/dev.js` (no new dependency) runs `npx supabase start` (a no-op when the stack is up), `node tools/web/build.js --local`, then `npx supabase functions serve` and the Vite dev server (127.0.0.1:8160) side by side. Ctrl+C stops both children (taskkill on Windows); if either exits, the other is stopped. The Docker stack stays up until `npm run db:stop`. `package.json` gets the `dev` script; the individual scripts stay. `docs/local-dev.md` and `docs/PROGRESS.md` list the shortcut.
