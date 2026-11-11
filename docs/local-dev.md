@@ -8,6 +8,15 @@ The web app is a Vue 3 app in `app/` (Vite, Vue Router, Pinia) and talks to a Su
 - Node 22.12 or newer (Node 24 is what the project is developed on; Vite 8 and Vitest 5 need at least 22.12). No Python is needed.
 - Free ports: 54321 (API), 54322 (database), 54323 (Studio), 54324 (Mailpit), 54327 (analytics), 8160 (Vite dev server). Another local Supabase project on the default ports must be stopped first.
 
+## Quick start
+
+```
+npm install
+npm run dev
+```
+
+`npm run dev` (`tools/web/dev.js`) starts the stack, writes `app/.env.local`, and runs `functions:serve` and the Vite dev server together in one terminal. Ctrl+C stops both; the Docker stack stays up (`npm run db:stop` to stop it). Docker Desktop must be running. The steps below are the same thing done by hand.
+
 ## First run
 
 ```

@@ -288,3 +288,19 @@ Branch `feat/vue-migration` (from `feat/full-log-pages`). Plan: `docs/superpower
 ## M. Artifact removed from the repo
 
 Owner request (2026-10-25): only the web app stays. Deleted `weekly-150.html` (the single-file claude.ai Artifact, frozen at v5), `docs/page-contract.md` (its hosting rules), `tools/build-preview.sh` (its preview wrapper) and the `weekly150-preview` launch configuration. The published claude.ai Artifact link itself was not touched. `tools/gpx/gpx-lib.js` stays the single source of the parser for the web app (no longer pasted anywhere else). CLAUDE.md, `docs/PROGRESS.md` and `docs/local-dev.md` no longer describe the Artifact as a second form; history entries A to H above still describe how it was built and the old file is in git history (for example `git show b07b138:weekly-150.html`).
+
+
+## N. One command dev (`npm run dev`)
+
+Owner request (2026-10-27): start everything with `npm run dev`. New `tools/web/dev.js` (no new dependency) runs `npx supabase start` (a no-op when the stack is up), `node tools/web/build.js --local`, then `npx supabase functions serve` and the Vite dev server (127.0.0.1:8160) side by side. Ctrl+C stops both children (taskkill on Windows); if either exits, the other is stopped. The Docker stack stays up until `npm run db:stop`. `package.json` gets the `dev` script; the individual scripts stay. `docs/local-dev.md` and `docs/PROGRESS.md` list the shortcut.
+
+
+## O. Designs: run story templates (approved mockup, not built) and Strava sync (shelved)
+
+Owner request (2026-11-11): connect the app to a Xiaomi Smart Band 9, and add Instagram story templates for runs. No app code changed in this entry; it records two design documents and the decisions behind them.
+
+**Band link.** A direct link is not realistic for a web app (proprietary encrypted Bluetooth protocol, the band bonds to one app, Mi Fitness has no public API, Health Connect is native only). The workable route was Strava (Mi Fitness already syncs there). Design: `docs/superpowers/specs/2026-11-11-strava-sync-design.md`. **Shelved by the owner**: Strava requires a paid Strava subscription to create an API application (stated on Strava's getting started page, read 2026-11-11), and the owner does not want to pay. Nothing was built. The document keeps the researched facts (OAuth, webhooks, rate limits, single player mode, brand rules) and the open points (Strava's API Policy was not read; what Mi Fitness sends to Strava is unverified).
+
+**Story templates.** Design: `docs/superpowers/specs/2026-11-11-story-templates-design.md`, visual reference `docs/superpowers/specs/2026-11-11-story-templates-mockup.html` (the last mockup the owner approved). Six templates (A Race bib, B Clean, F Poster static; C Splits, D Route trace, E Week lap animated), a colour picker, an opacity slider, a choice of main number and up to 4 small numbers with a recommended set prefilled, the owner's own photo (never uploaded), 9:16 export as PNG or MP4. Reviewed once by a builder check; waiting for the owner's approval, then an implementation plan. Not built.
+
+**Decisions worth knowing.** Stories only for runs that still have their stored activity record (GPX imports), not for hand logged runs. Time on a story is moving time. Calories are left out (no data source). A Mi Fitness GPX file has position and time only, so heart rate, climb and cadence cannot be picked for the owner's own runs. The video export (WebCodecs H.264 into MP4) is unverified on real phones and is built first as a small spike, tested by the owner on Android; a platform where it fails gets the still image instead.
