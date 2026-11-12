@@ -17,3 +17,6 @@ supabase/functions/.env
 app/.env.local
 app/public/gpx-lib.js
 app/dist/
+
+# Local agent work files
+.superpowers/

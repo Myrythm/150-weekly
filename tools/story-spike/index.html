@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story export spike</title>
+<style>
+  :root { --bg:#111; --fg:#f2f2f2; --muted:#9a9a9a; --accent:#7cf; --line:#333; --bad:#f88; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.4 system-ui, sans-serif; max-width:480px; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  button { font:inherit; padding:12px 14px; margin:0 8px 8px 0; background:#222; color:var(--fg); border:1px solid var(--line); border-radius:8px; }
+  button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  button:disabled { opacity:.5; }
+  pre { white-space:pre-wrap; word-break:break-word; background:#1a1a1a; padding:10px; border-radius:8px; font-size:13px; }
+  #error { color:var(--bad); font-weight:600; }
+  video { width:100%; max-width:270px; background:#000; display:block; margin:8px 0; }
+  canvas { display:none; }
+</style>
+</head>
+<body>
+<h1>Story export spike</h1>
+<pre id="env"></pre>
+<div>
+  <button id="spike-webcodecs" type="button">Make MP4 (WebCodecs)</button>
+  <button id="spike-recorder" type="button">Make MP4 (MediaRecorder, 5 s live)</button>
+</div>
+<p id="status">Idle.</p>
+<p id="error" role="alert"></p>
+<pre id="result" hidden></pre>
+<video id="preview" controls playsinline hidden></video>
+<div>
+  <button id="spike-share" type="button" hidden>Share</button>
+  <button id="spike-download" type="button" hidden>Download</button>
+</div>
+<canvas id="cv" width="1080" height="1920"></canvas>
+
+<script type="module">
+import { Output, Mp4OutputFormat, BufferTarget, CanvasSource, Quality } from 'https://cdn.jsdelivr.net/npm/mediabunny@1.65.2/+esm';
+
+const W = 1080, H = 1920, FPS = 30, SECONDS = 5, FRAMES = FPS * SECONDS, BITRATE = 8e6;
+const $ = (id) => document.getElementById(id);
+const cv = $('cv');
+const ctx = cv.getContext('2d');
+let currentFile = null;
+let busy = false;
+
+$('env').textContent = [
+  'userAgent: ' + navigator.userAgent,
+  'isSecureContext: ' + window.isSecureContext,
+  'VideoEncoder: ' + (typeof VideoEncoder !== 'undefined'),
+  'MediaRecorder: ' + (typeof MediaRecorder !== 'undefined'),
+  'navigator.share: ' + (typeof navigator.share === 'function'),
+].join('\n');
+
+function drawFrame(t, n) {
+  ctx.fillStyle = '#101820';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += 60) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+  for (let y = 0; y <= H; y += 60) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+  ctx.stroke();
+  const bx = ((t / SECONDS) % 1) * (W - 160);
+  ctx.fillStyle = '#ffb400';
+  ctx.fillRect(bx, 600, 160, 720);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 320px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(n).padStart(3, '0'), W / 2, 960);
+  ctx.font = '48px sans-serif';
+  ctx.fillText('t = ' + t.toFixed(2) + ' s', W / 2, 1200);
+}
+
+function setStatus(s) { $('status').textContent = s; }
+function showError(msg) { $('error').textContent = 'ERROR: ' + msg; setStatus('Failed.'); }
+function clearUi() {
+  $('error').textContent = '';
+  $('result').hidden = true;
+  $('preview').hidden = true;
+  $('spike-share').hidden = true;
+  $('spike-download').hidden = true;
+  currentFile = null;
+}
+
+function showResult(file, path, codec, ms) {
+  currentFile = file;
+  const url = URL.createObjectURL(file);
+  const v = $('preview');
+  v.src = url;
+  v.hidden = false;
+  $('result').hidden = false;
+  $('result').textContent = [
+    'path: ' + path,
+    'codec: ' + codec,
+    'size: ' + (file.size / 1e6).toFixed(2) + ' MB (' + file.size + ' bytes)',
+    'time taken: ' + (ms / 1000).toFixed(1) + ' s',
+    'file type: ' + file.type,
+  ].join('\n');
+  $('spike-download').hidden = false;
+  let canShare = false;
+  try { canShare = !!(navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { canShare = false; }
+  $('spike-share').hidden = !canShare;
+  setStatus('Done.');
+}
+
+$('spike-download').addEventListener('click', () => {
+  if (!currentFile) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(currentFile);
+  a.download = currentFile.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
+// navigator.share is called directly in the click handler with the already created File.
+$('spike-share').addEventListener('click', () => {
+  if (!currentFile) return;
+  navigator.share({ files: [currentFile] }).catch((e) => {
+    if (e && e.name === 'AbortError') { setStatus('Share cancelled.'); return; }
+    showError('Share failed: ' + (e && e.message ? e.message : e));
+  });
+});
+
+function setBusy(b) {
+  busy = b;
+  $('spike-webcodecs').disabled = b;
+  $('spike-recorder').disabled = b;
+}
+
+async function pickAvc() {
+  if (typeof VideoEncoder === 'undefined') throw new Error('VideoEncoder (WebCodecs) is not available in this browser or page.');
+  for (const codec of ['avc1.640029', 'avc1.64002A', 'avc1.4d0029']) {
+    try {
+      const r = await VideoEncoder.isConfigSupported({ codec, width: W, height: H, bitrate: BITRATE, framerate: FPS });
+      if (r && r.supported) return codec;
+    } catch (e) { /* try next */ }
+  }
+  throw new Error('No H.264 codec string is supported for 1080x1920 (tried avc1.640029, avc1.64002A, avc1.4d0029).');
+}
+
+async function runWebCodecs() {
+  const t0 = performance.now();
+  const codec = await pickAvc();
+  setStatus('Encoding with ' + codec + ' ...');
+  const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+  let gotChunk = false;
+  let timer;
+  const watchdog = new Promise((_, reject) => {
+    timer = setTimeout(() => { if (!gotChunk) reject(new Error('No encoded chunk arrived within 10 s. The encoder is stuck or unsupported.')); }, 10000);
+  });
+  const source = new CanvasSource(cv, {
+    codec: 'avc',
+    fullCodecString: codec,
+    quality: new Quality({ bitrate: BITRATE }),
+    keyFrameInterval: 1,
+    onEncodedPacket: () => { gotChunk = true; },
+  });
+  output.addVideoTrack(source, { frameRate: FPS });
+  const work = (async () => {
+    await output.start();
+    for (let i = 0; i < FRAMES; i++) {
+      drawFrame(i / FPS, i);
+      await source.add(i / FPS, 1 / FPS);
+      if (i % 15 === 0) setStatus('Encoded frame ' + i + ' of ' + FRAMES);
+    }
+    source.close();
+    await output.finalize();
+  })();
+  work.catch(() => {});
+  try {
+    await Promise.race([work, watchdog]);
+  } finally {
+    clearTimeout(timer);
+  }
+  const buf = output.target.buffer;
+  if (!buf) throw new Error('Mediabunny finished but produced no buffer.');
+  const file = new File([buf], 'story-webcodecs.mp4', { type: 'video/mp4' });
+  showResult(file, 'webcodecs (Mediabunny CanvasSource)', codec, performance.now() - t0);
+}
+
+async function runRecorder() {
+  if (typeof MediaRecorder === 'undefined') throw new Error('MediaRecorder is not available in this browser.');
+  if (!cv.captureStream) throw new Error('canvas.captureStream is not available in this browser.');
+  const types = ['video/mp4;codecs=avc1.640029', 'video/mp4;codecs=avc1', 'video/mp4'];
+  const mime = types.find((m) => MediaRecorder.isTypeSupported(m));
+  if (!mime) throw new Error('MediaRecorder supports none of: ' + types.join(', '));
+  const t0 = performance.now();
+  drawFrame(0, 0);
+  const stream = cv.captureStream(FPS);
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: BITRATE });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((resolve, reject) => {
+    rec.onstop = resolve;
+    rec.onerror = (e) => reject(new Error('MediaRecorder error: ' + (e.error && e.error.message ? e.error.message : 'unknown')));
+  });
+  rec.start(1000);
+  setStatus('Recording 5 s in real time ...');
+  const start = performance.now();
+  await new Promise((resolve) => {
+    function tick() {
+      const el = (performance.now() - start) / 1000;
+      if (el >= SECONDS) { resolve(); return; }
+      drawFrame(el, Math.floor(el * FPS));
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
+  rec.stop();
+  stream.getTracks().forEach((t) => t.stop());
+  await stopped;
+  if (!chunks.length) throw new Error('MediaRecorder produced no data.');
+  const type = (rec.mimeType || mime).split(';')[0] || 'video/mp4';
+  const file = new File(chunks, 'story-recorder.mp4', { type });
+  showResult(file, 'recorder (MediaRecorder)', rec.mimeType || mime, performance.now() - t0);
+}
+
+function wire(id, fn) {
+  $(id).addEventListener('click', async () => {
+    if (busy) return;
+    clearUi();
+    setBusy(true);
+    try { await fn(); }
+    catch (e) { showError(e && e.message ? e.message : String(e)); }
+    finally { setBusy(false); }
+  });
+}
+wire('spike-webcodecs', runWebCodecs);
+wire('spike-recorder', runRecorder);
+drawFrame(0, 0);
+</script>
+</body>
+</html>
