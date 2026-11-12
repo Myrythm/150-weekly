@@ -15,7 +15,7 @@ export async function loadPhoto(file) {
     throw fail('decode-failed');
   }
   if (!full || !(full.width > 0) || !(full.height > 0)) {
-    if (full && full.close) full.close();
+    close(full);
     throw fail('decode-failed');
   }
   const long = Math.max(full.width, full.height);
@@ -23,15 +23,53 @@ export async function loadPhoto(file) {
   const s = MAX_SIDE / long;
   const w = Math.max(1, Math.round(full.width * s));
   const h = Math.max(1, Math.round(full.height * s));
-  let small;
+  let small = null;
   try {
     small = await createImageBitmap(full, { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
   } catch (e) {
-    throw fail('decode-failed');
-  } finally {
-    if (full.close) full.close();
+    small = null;
   }
-  return { bitmap: small, w: w, h: h };
+  /* An engine may ignore or partly honour the resize options: then draw it down on a canvas. */
+  if (!fits(small)) {
+    close(small);
+    try {
+      small = await viaCanvas(full, w, h);
+    } catch (e) {
+      small = null;
+    }
+  }
+  close(full);
+  if (!fits(small)) {
+    close(small);
+    throw fail('decode-failed');
+  }
+  return { bitmap: small, w: small.width, h: small.height };
+}
+
+function close(bitmap) {
+  if (bitmap && typeof bitmap.close === 'function') bitmap.close();
+}
+
+function fits(bitmap) {
+  return !!bitmap && bitmap.width > 0 && bitmap.height > 0 && Math.max(bitmap.width, bitmap.height) <= MAX_SIDE;
+}
+
+async function viaCanvas(src, w, h) {
+  let canvas;
+  if (typeof OffscreenCanvas === 'function') {
+    canvas = new OffscreenCanvas(w, h);
+  } else if (typeof document !== 'undefined') {
+    canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+  } else {
+    throw fail('decode-failed');
+  }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw fail('decode-failed');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, 0, 0, w, h);
+  return createImageBitmap(canvas);
 }
 
 function clamp(v, lo, hi) {

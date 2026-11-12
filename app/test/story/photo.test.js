@@ -67,6 +67,60 @@ test('loadPhoto scales the longer side to 2160, applies orientation and closes t
   expect(stub.mock.calls[0][1]).toMatchObject({ imageOrientation: 'from-image' });
 });
 
+function fakeOffscreen(drawn) {
+  return class {
+    constructor(w, h) { this.width = w; this.height = h; }
+    getContext() { return { drawImage: (...a) => drawn.push(a) }; }
+  };
+}
+
+test('loadPhoto falls back to a canvas when the resize is ignored, and closes both oversized bitmaps', async () => {
+  const full = { width: 8000, height: 6000, close: vi.fn() };
+  const ignored = { width: 8000, height: 6000, close: vi.fn() };
+  const drawn = [];
+  const Off = fakeOffscreen(drawn);
+  vi.stubGlobal('OffscreenCanvas', Off);
+  vi.stubGlobal('createImageBitmap', vi.fn((src) => {
+    if (src === full) return Promise.resolve(ignored);
+    if (src instanceof Off) return Promise.resolve({ width: src.width, height: src.height, close: vi.fn() });
+    return Promise.resolve(full);
+  }));
+  const p = await loadPhoto(new File(['x'], 'p.jpg', { type: 'image/jpeg' }));
+  expect(Math.max(p.w, p.h)).toBeLessThanOrEqual(2160);
+  expect(p).toMatchObject({ w: 2160, h: 1620 });
+  expect(p.bitmap).toMatchObject({ width: 2160, height: 1620 });
+  expect(full.close).toHaveBeenCalledTimes(1);
+  expect(ignored.close).toHaveBeenCalledTimes(1);
+  expect(drawn).toHaveLength(1);
+  expect(drawn[0][0]).toBe(full);
+});
+
+test('loadPhoto reports the real size of the resized bitmap', async () => {
+  const full = { width: 8000, height: 6000, close: vi.fn() };
+  vi.stubGlobal('createImageBitmap', vi.fn((src) => src === full
+    ? Promise.resolve({ width: 2000, height: 1500, close: vi.fn() })
+    : Promise.resolve(full)));
+  const p = await loadPhoto(new File(['x'], 'p.jpg', { type: 'image/jpeg' }));
+  expect(p).toMatchObject({ w: 2000, h: 1500 });
+  expect(full.close).toHaveBeenCalledTimes(1);
+});
+
+test('loadPhoto rejects with decode-failed and closes everything when the canvas fallback fails too', async () => {
+  const full = { width: 8000, height: 6000, close: vi.fn() };
+  const ignored = { width: 8000, height: 6000, close: vi.fn() };
+  const Off = fakeOffscreen([]);
+  vi.stubGlobal('OffscreenCanvas', Off);
+  vi.stubGlobal('createImageBitmap', vi.fn((src) => {
+    if (src === full) return Promise.resolve(ignored);
+    if (src instanceof Off) return Promise.reject(new Error('no'));
+    return Promise.resolve(full);
+  }));
+  const err = await loadPhoto(new File(['x'], 'p.jpg', { type: 'image/jpeg' })).catch(e => e);
+  expect(err.message).toBe('decode-failed');
+  expect(full.close).toHaveBeenCalledTimes(1);
+  expect(ignored.close).toHaveBeenCalledTimes(1);
+});
+
 test('loadPhoto keeps a small photo as it is', async () => {
   const small = { width: 1200, height: 900, close: vi.fn() };
   vi.stubGlobal('createImageBitmap', vi.fn(() => Promise.resolve(small)));
