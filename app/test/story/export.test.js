@@ -69,7 +69,7 @@ function encoderSupported(ok) {
   vi.stubGlobal('VideoEncoder', { isConfigSupported: vi.fn(async (c) => ({ supported: ok, config: c })) });
 }
 
-function recorderSupporting(test) {
+function recorderSupporting(test, bytes) {
   const made = [];
   class FakeRecorder {
     static isTypeSupported(m) { return test(m); }
@@ -82,7 +82,7 @@ function recorderSupporting(test) {
     start() { this.state = 'recording'; }
     stop() {
       this.state = 'inactive';
-      this.ondataavailable({ data: new Blob(['mp4data'], { type: 'video/mp4' }) });
+      this.ondataavailable({ data: new Blob([bytes || mp4Bytes()], { type: 'video/mp4' }) });
       setTimeout(() => this.onstop(), 0);
     }
   }
@@ -202,6 +202,7 @@ test('exportVideo falls through to null when WebCodecs gives no MP4 and nothing 
 });
 
 test('exportVideo falls through to MediaRecorder when the encoder throws', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   noVideoApis();
   encoderSupported(true);
   mb.throwOnAdd = true;
@@ -212,11 +213,13 @@ test('exportVideo falls through to MediaRecorder when the encoder throws', async
   const out = await exportVideo(fakeCanvas(), drawFrame, vi.fn());
   expect(mb.cancelled).toBe(1);
   expect(out.path).toBe('recorder');
+  expect(warn).toHaveBeenCalledWith('story export: webcodecs failed', expect.any(Error));
   expect(out.blob.type).toBe('video/mp4');
   expect(out.blob.size).toBeGreaterThan(0);
 });
 
 test('exportVideo falls through to MediaRecorder when add never resolves after the first packet', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.useFakeTimers();
   noVideoApis();
   encoderSupported(true);
@@ -241,6 +244,7 @@ test('exportVideo falls through to MediaRecorder when add never resolves after t
   expect(out.path).toBe('recorder');
   expect(out.blob.type).toBe('video/mp4');
   expect(progress[progress.length - 1]).toBe(1);
+  expect(warn).toHaveBeenCalledWith('story export: webcodecs failed', expect.any(Error));
   /* The stalled attempt must not draw or report once it is stopped, even if add() resolves late. */
   const draws = drawFrame.mock.calls.length;
   const reports = progress.length;
@@ -252,6 +256,7 @@ test('exportVideo falls through to MediaRecorder when add never resolves after t
 });
 
 test('exportVideo gives up when finalize never finishes', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.useFakeTimers();
   noVideoApis();
   encoderSupported(true);
@@ -264,9 +269,11 @@ test('exportVideo gives up when finalize never finishes', async () => {
   await vi.advanceTimersByTimeAsync(2000);
   await expect(pending).resolves.toBeNull();
   expect(mb.cancelled).toBe(1);
+  expect(warn).toHaveBeenCalledWith('story export: webcodecs failed', expect.any(Error));
 });
 
 test('exportVideo gives up when the encode keeps progressing but exceeds the overall cap', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.useFakeTimers();
   noVideoApis();
   encoderSupported(true);
@@ -281,6 +288,7 @@ test('exportVideo gives up when the encode keeps progressing but exceeds the ove
   await expect(pending).resolves.toBeNull();
   expect(mb.cancelled).toBe(1);
   expect(mb.adds.length).toBeLessThan(FRAMES);
+  expect(warn).toHaveBeenCalled();
 });
 
 test('exportVideo records in real time for DURATION seconds with MediaRecorder', async () => {
@@ -301,6 +309,78 @@ test('exportVideo records in real time for DURATION seconds with MediaRecorder',
   expect(Math.max(...times)).toBeLessThanOrEqual(DURATION);
   expect(Math.max(...times)).toBeGreaterThan(DURATION - 0.5);
   expect(progress[progress.length - 1]).toBe(1);
+});
+
+test('exportVideo ends promptly with null when a recorder frame throws (a stale export)', async () => {
+  vi.useFakeTimers();
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  noVideoApis();
+  const made = recorderSupporting((m) => m.indexOf('video/mp4') === 0);
+  let ts = 0;
+  vi.stubGlobal('requestAnimationFrame', (cb) => { ts += 100; setTimeout(() => cb(ts), 0); return 1; });
+  let calls = 0;
+  const drawFrame = vi.fn(() => { calls++; if (calls > 3) throw new Error('The export is no longer wanted.'); });
+  const canvas = fakeCanvas();
+  const track = { stop: vi.fn() };
+  canvas.captureStream = vi.fn(() => ({ getTracks: () => [track] }));
+  let settled = false;
+  const pending = exportVideo(canvas, drawFrame, vi.fn()).then((r) => { settled = true; return r; });
+  await vi.advanceTimersByTimeAsync(500);
+  expect(settled).toBe(true);
+  await expect(pending).resolves.toBeNull();
+  expect(made[0].state).toBe('inactive');
+  expect(track.stop).toHaveBeenCalled();
+  /* no more frames once it has ended */
+  const n = drawFrame.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(drawFrame.mock.calls.length).toBe(n);
+  expect(warn).toHaveBeenCalledWith('story export: recorder failed', expect.any(Error));
+});
+
+test('exportVideo resolves null when the recorder gives a file without an ftyp box', async () => {
+  noVideoApis();
+  recorderSupporting((m) => m.indexOf('video/mp4') === 0, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]));
+  let ts = 0;
+  vi.stubGlobal('requestAnimationFrame', (cb) => { ts += 250; setTimeout(() => cb(ts), 0); return 1; });
+  await expect(exportVideo(fakeCanvas(), vi.fn(), vi.fn())).resolves.toBeNull();
+});
+
+test('the recorder path records a detached canvas from a hidden place in the page, then takes it out', async () => {
+  noVideoApis();
+  recorderSupporting((m) => m.indexOf('video/mp4') === 0);
+  let ts = 0;
+  const seen = [];
+  vi.stubGlobal('requestAnimationFrame', (cb) => { ts += 250; setTimeout(() => cb(ts), 0); return 1; });
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1920;
+  canvas.captureStream = vi.fn(() => ({ getTracks: () => [{ stop: vi.fn() }] }));
+  const drawFrame = vi.fn(() => {
+    seen.push({ connected: canvas.isConnected, hidden: canvas.getAttribute('aria-hidden'), position: canvas.style.position, left: canvas.style.left });
+  });
+  const out = await exportVideo(canvas, drawFrame, vi.fn());
+  expect(out.path).toBe('recorder');
+  expect(seen[0]).toEqual({ connected: true, hidden: 'true', position: 'fixed', left: '-99999px' });
+  expect(canvas.isConnected).toBe(false);
+  expect(canvas.getAttribute('aria-hidden')).toBeNull();
+  expect(canvas.style.position).toBe('');
+});
+
+test('the recorder path leaves a canvas that is already in the page where it is', async () => {
+  noVideoApis();
+  recorderSupporting((m) => m.indexOf('video/mp4') === 0);
+  let ts = 0;
+  vi.stubGlobal('requestAnimationFrame', (cb) => { ts += 250; setTimeout(() => cb(ts), 0); return 1; });
+  const holder = document.createElement('div');
+  document.body.appendChild(holder);
+  const canvas = document.createElement('canvas');
+  holder.appendChild(canvas);
+  canvas.captureStream = vi.fn(() => ({ getTracks: () => [{ stop: vi.fn() }] }));
+  const out = await exportVideo(canvas, vi.fn(), vi.fn());
+  expect(out.path).toBe('recorder');
+  expect(canvas.parentNode).toBe(holder);
+  expect(canvas.getAttribute('aria-hidden')).toBeNull();
+  holder.remove();
 });
 
 test('canShareFile is false when navigator.canShare is missing', () => {

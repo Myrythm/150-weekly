@@ -87,7 +87,8 @@ function reporter(onProgress) {
   };
 }
 
-/* Frame by frame H.264 into an MP4 with Mediabunny. Resolves the MP4 blob, or null. */
+/* Frame by frame H.264 into an MP4 with Mediabunny. Resolves the MP4 blob, or null when the output
+   is not an MP4; rejects (after cancelling the output) when the encode fails or stalls. */
 async function viaWebCodecs(canvas, drawFrame, report, codec) {
   const mb = await import('mediabunny');
   const output = new mb.Output({ format: new mb.Mp4OutputFormat(), target: new mb.BufferTarget() });
@@ -145,7 +146,8 @@ async function viaWebCodecs(canvas, drawFrame, report, codec) {
     } finally {
       clearTimeout(cancelTimer);
     }
-    return null;
+    /* exportVideo logs it and falls through to MediaRecorder */
+    throw e;
   } finally {
     stopped = true;
     clearTimeout(stallTimer);
@@ -156,14 +158,37 @@ async function viaWebCodecs(canvas, drawFrame, report, codec) {
   return new Blob([buffer], { type: 'video/mp4' });
 }
 
-/* Real time recording of the canvas for DURATION seconds. Resolves an MP4 blob, or null. */
+/* Puts a canvas that is not in the page into it, out of sight, so the recording sees it drawn like
+   the in-page canvas of the Task 1 spike. Returns an undo function, or null when nothing was moved. */
+function attachHidden(canvas) {
+  if (canvas.isConnected !== false || typeof document === 'undefined' || !document.body) return null;
+  const css = canvas.style.cssText;
+  const hadHidden = canvas.hasAttribute('aria-hidden');
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.style.position = 'fixed';
+  canvas.style.left = '-99999px';
+  canvas.style.top = '0';
+  canvas.style.pointerEvents = 'none';
+  document.body.appendChild(canvas);
+  return function () {
+    canvas.remove();
+    canvas.style.cssText = css;
+    if (!hadHidden) canvas.removeAttribute('aria-hidden');
+  };
+}
+
+/* Real time recording of the canvas for DURATION seconds. Resolves an MP4 blob, or null.
+   Rejects when a frame throws (a stale export), so the recording stops at once. */
 async function viaRecorder(canvas, drawFrame, report) {
   const type = pickRecorderType();
   if (!type || typeof canvas.captureStream !== 'function') return null;
-  drawFrame(0);
-  const stream = canvas.captureStream(FPS);
+  const detach = attachHidden(canvas);
+  let stream = null;
   let deadline;
+  let over = false;
   try {
+    drawFrame(0);
+    stream = canvas.captureStream(FPS);
     const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: BITRATE });
     if (rec.mimeType && rec.mimeType.toLowerCase().indexOf('video/mp4') !== 0) return null;
     const chunks = [];
@@ -177,31 +202,44 @@ async function viaRecorder(canvas, drawFrame, report) {
       deadline = setTimeout(function () { reject(new Error('Recording took too long.')); },
         DURATION * 1000 + RECORDER_SLACK_MS);
     });
+    late.catch(function () {});
     rec.start(1000);
-    const played = new Promise(function (resolve) {
+    const played = new Promise(function (resolve, reject) {
       let start = null;
       function tick(ts) {
+        if (over) return;
         if (start === null) start = ts;
         const elapsed = (ts - start) / 1000;
         if (elapsed >= DURATION) { resolve(); return; }
-        drawFrame(elapsed);
+        try {
+          drawFrame(elapsed);
+        } catch (e) {
+          reject(e);
+          return;
+        }
         report(elapsed / DURATION);
         requestAnimationFrame(tick);
       }
       requestAnimationFrame(tick);
     });
+    played.catch(function () {});
     try {
       await Promise.race([played, late]);
     } finally {
+      over = true;
       if (rec.state !== 'inactive') rec.stop();
     }
     await Promise.race([stopped, late]);
     if (!chunks.length) return null;
     const blob = new Blob(chunks, { type: 'video/mp4' });
-    return blob.size > 0 ? blob : null;
+    if (!(blob.size > 0)) return null;
+    if (!isMp4(await blob.slice(0, 16).arrayBuffer())) return null;
+    return blob;
   } finally {
+    over = true;
     clearTimeout(deadline);
-    stream.getTracks().forEach(function (t) { t.stop(); });
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    if (detach) detach();
   }
 }
 
@@ -218,7 +256,8 @@ export async function exportVideo(canvas, drawFrame, onProgress) {
       const blob = await viaWebCodecs(canvas, drawFrame, report, codec);
       if (blob) { report(1); return { blob, path: 'webcodecs' }; }
     } catch (e) {
-      /* fall through to MediaRecorder */
+      /* fall through to MediaRecorder; the warning helps when a phone test fails */
+      console.warn('story export: webcodecs failed', e);
     }
   }
   if (!pickRecorderType()) return null;
@@ -228,6 +267,7 @@ export async function exportVideo(canvas, drawFrame, onProgress) {
     if (blob) { report(1); return { blob, path: 'recorder' }; }
   } catch (e) {
     /* no MP4 from either path */
+    console.warn('story export: recorder failed', e);
   }
   return null;
 }
