@@ -304,3 +304,49 @@ Owner request (2026-11-11): connect the app to a Xiaomi Smart Band 9, and add In
 **Story templates.** Design: `docs/superpowers/specs/2026-11-11-story-templates-design.md`, visual reference `docs/superpowers/specs/2026-11-11-story-templates-mockup.html` (the last mockup the owner approved). Six templates (A Race bib, B Clean, F Poster static; C Splits, D Route trace, E Week lap animated), a colour picker, an opacity slider, a choice of main number and up to 4 small numbers with a recommended set prefilled, the owner's own photo (never uploaded), 9:16 export as PNG or MP4. Reviewed once by a builder check; waiting for the owner's approval, then an implementation plan. Not built.
 
 **Decisions worth knowing.** Stories only for runs that still have their stored activity record (GPX imports), not for hand logged runs. Time on a story is moving time. Calories are left out (no data source). A Mi Fitness GPX file has position and time only, so heart rate, climb and cadence cannot be picked for the owner's own runs. The video export (WebCodecs H.264 into MP4) is unverified on real phones and is built first as a small spike, tested by the owner on Android; a platform where it fails gets the still image instead.
+
+
+## P. Run story templates (Instagram story export)
+
+Branch `feat/story-templates` (cut from `feat/npm-run-dev`, 63b68fe; not pushed, not merged). Design: `docs/superpowers/specs/2026-11-11-story-templates-design.md`, plan: `docs/superpowers/plans/2026-11-11-story-templates.md`. Built task by task with a review after each task and one whole-branch review with a fix wave.
+
+**Phone result (Task 1): pending.** The spike page `tools/story-spike/index.html` (deployed as a Vercel preview for the owner) tests two video paths on a phone: WebCodecs H.264 into MP4 through Mediabunny 1.65.2, and MediaRecorder with an MP4 type. It also tests share and download. The owner's Android Chrome test with Instagram has not been done yet, so nothing is proven on a phone. On desktop Chrome WebCodecs gave a full 5.0 s MP4 and MediaRecorder gave an MP4 that played 4.13 s. `app/src/story/export.js` therefore tries WebCodecs first, then MediaRecorder; that attempt order and its header comment must be revisited when the phone result arrives (swap the order if WebCodecs fails there, keep both paths).
+
+**What exists.**
+- Route `/story/:id?from=week|log` (`meta.auth`), a lazy route (`() => import(...)`), so the renderer, templates and export code stay out of the main chunk. `ActivityPage.vue` shows a **Share story** link (`#gpx-d-story`) for a run that still has its stored route (`storyEligible`); other activities have none. An unknown or ineligible id shows `No story for this run` with a link back.
+- Six templates at 1080 by 1920: A Race bib, B Clean, F Poster (static, PNG) and C Splits, D Route trace, E Week lap (animated, 5 s at 30 fps, MP4). The model (`story/model.js`) reads the stored activity record: distance, moving time, pace, heart rate, best km, max heart rate, climb, cadence (only what the file has), the splits as lanes, the route path and the week figures (credited minutes, target, day dots; E needs a weekly target for the age).
+- Colour: 7 presets, a custom colour input and Reset colour; the text colour is chosen for contrast (`story/colors.js`). An opacity slider (steps of 5) for the colour layer. C, D and E put a colour layer only over a photo.
+- Numbers: one main number (distance, time or pace) and up to 4 small ones, from the numbers that exist for the activity; a recommended set (time, pace, heart rate) is the default.
+- Photo: the owner's own picture, decoded in the browser only (never uploaded, stored or saved), EXIF orientation applied, longest side cut to 2160 px, released when replaced, removed or the page closes. A bad file shows `#story-photo-error` and keeps the previous good photo.
+- Export order (`story/export.js`). Static: PNG. Animated: WebCodecs H.264 MP4 through Mediabunny 1.65.2 (dynamic import, own chunk, loaded on demand), then MediaRecorder with an MP4 type (the file must start with an `ftyp` box; a WebM is never returned because Instagram needs an MP4), then PNG with a plain message. The WebCodecs path has a stall watchdog (no progress for 10 s) and a total cap. A stale export (the page moved on or the template changed) ends without a file. Fonts are loaded before the first frame (`story/fonts.js`). Then **Share** (`navigator.share` with the file, shown only when the browser can share it) and **Download**.
+- Saved settings: `prefs.story` inside `w150.prefs` (no new server key): `{ template, color, opacity, hero, small }`. Defaults `A`, the first preset colour, 100, `dist`, `null` (recommended set). `sanitizeStoryPrefs` fixes anything else: unknown template to `A`, colour only `#RRGGBB` (upper-cased), opacity clamped to 0 to 100 in steps of 5, hero only `dist`, `time` or `pace`, small numbers kept in a fixed order and cut to 4. `setStoryPrefs` in `stores/data.js` saves through the normal debounced write; older accounts without the field get the defaults.
+- The preview canvas has a text alternative (`aria-label` on the `role="img"` canvas) that reads the numbers aloud; with reduced motion the animated preview shows its final frame and plays once on request.
+
+**New files.**
+- `app/src/story/`: `model.js`, `numbers.js`, `colors.js`, `draw.js`, `render.js`, `timeline.js`, `photo.js`, `fonts.js`, `export.js`, `templates/` (`bib.js`, `clean.js`, `poster.js`, `splits.js`, `route.js`, `weeklap.js`).
+- `app/src/components/StoryCanvas.vue`, `app/src/components/StoryControls.vue`, `app/src/pages/StoryPage.vue`.
+- Changed: `router.js`, `pages/ActivityPage.vue`, `stores/data.js`, `styles/app.css`, `package.json` and `package-lock.json` (mediabunny 1.65.2), `.gitignore`.
+- Tests in `app/test/story/` (`colors`, `export`, `fonts`, `model`, `numbers`, `photo`, `render`, `timeline`, and the `fakeCtx.js` helper), `app/test/pages/story.test.js`, plus additions to `activity.test.js`, `router.test.js` and `stores/data.test.js`.
+- `tools/story-spike/index.html`: the phone spike page (single file, Mediabunny from jsDelivr).
+
+**Decisions taken during the build.**
+- E shows the main number plus at most 3 small numbers (the approved mockup has no room for more). With 4 small numbers picked, a note `Week lap shows the first 3.` (`#story-num-e-note`) says so.
+- The story route is lazy. Without it the main chunk grew past 500 kB with the renderer in it.
+- Desktop layout: from 960px the preview stays in a sticky left column beside the controls; on phones the preview comes first and the controls follow.
+- C, D and E draw their colour layer only over a photo; without a photo they use the plain background.
+- Time on a story is moving time; hand logged runs get no story; calories are left out; a lane label is the split's own km index, and with more than 10 full km the lanes become 5 km blocks.
+- Late fixes from the final review: the recorder path stops when a frame throws, checks the `ftyp` bytes and records a detached canvas from a hidden place in the page; the two fall-through catches log `console.warn` so a phone test can be diagnosed; the E tag no longer slides over the numbers; Week lap has its own reason text for an age without a target.
+
+**Verified (at 23690cc).**
+- `npm test`: Vitest 26 files, 395 tests passed; gpx test 50 passed (the owner's private GPX file is present in this checkout; 42 passed and 1 skipped without it, unchanged).
+- `npm run db:test` 71 pgTAP assertions passed; `npm run test:smoke` 14 of 14 passed; `npm run app:build:local` exit 0. Chunks: main `index` 496.52 kB (154.04 kB gzip), `StoryPage` 42.02 kB, Mediabunny 732.89 kB (rolldown names it `src-*.js`; loaded only when a video is created; the over 500 kB advisory comes from it), CSS 46.45 kB.
+- No em or en dash in `app`, `docs`, `tools/web`, `supabase` or `tools/story-spike`; no `service_role` in `app/src`, `app/index.html` or `app/dist`; no `v-html` in `app/src`.
+- Desktop browser check on `weekly150-web` (127.0.0.1:8160, test account): all six templates render; PNG created; WebCodecs MP4 5.0 s at 1080 by 1920 (830 kB) in 2.7 s; photo with opacity 50 and the C blur; 375 and 400 px with no horizontal scroll; light theme; no console errors. Forcing the MediaRecorder path (VideoEncoder removed) fell back to PNG with the plain message and a `recorder failed` warning.
+
+**Not verified.**
+- The MediaRecorder path inside the app: the browser pane was hidden, so animation frames were paused and the recording could not run (only the fall back to PNG was seen).
+- The Android phone test with Instagram (pending with the owner; the spike page was deployed for it). Text sharpness, cut off text and Instagram's interface were not checked on a phone.
+- iPhone and Safari: untested.
+- Dark theme and reduced motion in the browser (the code follows the colour tokens and the reduced motion rule, but neither was looked at).
+
+**Open items and deferred minors.** Android and Instagram test, then revisit the export attempt order; iPhone test; C re-blurs the photo on every frame (two full `drawImage` per frame), so it may be slow on a phone (cache the blurred band if so); text at low opacity over a photo can be hard to read (shadow only for white text; matches the mockup); a photo picked during an export is released silently; a stale export logs two console warnings; `setStoryPrefs` runs on every slider tick. `CLAUDE.md` is unchanged: no documented count or command changed.
