@@ -1,6 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { useDataStore } from '../../src/stores/data.js';
 import { parseYmd } from '../../src/core/dates.js';
+import { DEFAULT_STORY_PREFS } from '../../src/story/numbers.js';
 
 /* a stand-in for the sync store: get, set and remove over a Map, values copied like the real one */
 function fakeSync(initial) {
@@ -102,7 +103,7 @@ test('clearAll keeps the age and deletes every server key including w150.breaks'
   expect(fake.map.has('w150.plan')).toBe(false);
   expect(fake.map.has('w150.tracks')).toBe(false);
   expect(fake.map.get('w150.meta')).toEqual({ v: 1, seeded: true, sampleActive: false });
-  expect(fake.map.get('w150.prefs')).toEqual({ sound: false, age: 70, nudge: false });
+  expect(fake.map.get('w150.prefs')).toEqual({ sound: false, age: 70, nudge: false, story: DEFAULT_STORY_PREFS });
   expect(store.prefs.age).toBe(70);
   expect(store.sessions).toEqual([]);
   expect(store.plan).toBe(null);
@@ -134,7 +135,7 @@ test('age, sound and plan actions persist', () => {
   store.load();
   store.setAge(40);
   store.setSound(true);
-  expect(fake.map.get('w150.prefs')).toEqual({ sound: true, age: 40, nudge: false });
+  expect(fake.map.get('w150.prefs')).toEqual({ sound: true, age: 40, nudge: false, story: DEFAULT_STORY_PREFS });
   expect(store.guide.key).toBe('adult');
   store.savePlan({ after: 'lunch', will: 'walk', where: 'the park', minutes: 5 });
   expect(fake.map.get('w150.plan')).toMatchObject({ after: 'lunch', will: 'walk', where: 'the park', minutes: 5, sample: false });
@@ -155,4 +156,30 @@ test('saveTrack keeps the newest 30 imports and prunes unreferenced ones', () =>
   expect(ids).not.toContain('t_0');
   expect(store.saveTrack('t_orphan', TRACK)).toBe(true);
   expect(store.tracks.t_orphan).toBeUndefined();
+});
+
+test('story settings: default after load, setStoryPrefs merges and persists', () => {
+  const { fake, store } = setup({ 'w150.meta': META, 'w150.sessions': [], 'w150.prefs': { age: 30 } });
+  store.load();
+  expect(store.prefs.story).toEqual(DEFAULT_STORY_PREFS);
+  store.setStoryPrefs({ template: 'C', opacity: 50 });
+  expect(store.prefs.story).toEqual({ ...DEFAULT_STORY_PREFS, template: 'C', opacity: 50 });
+  expect(fake.map.get('w150.prefs').story).toEqual({ ...DEFAULT_STORY_PREFS, template: 'C', opacity: 50 });
+  expect(fake.map.get('w150.prefs').age).toBe(30);
+});
+
+test('story settings: a broken stored value loads as valid settings', () => {
+  const { store } = setup({ 'w150.meta': META, 'w150.sessions': [], 'w150.prefs': { age: 30, story: { template: 'Z' } } });
+  store.load();
+  expect(store.prefs.story.template).toBe('A');
+});
+
+test('story settings: clearAll resets them and keeps the age', () => {
+  const { fake, store } = setup({ 'w150.meta': META, 'w150.sessions': [], 'w150.prefs': { age: 30 } });
+  store.load();
+  store.setStoryPrefs({ template: 'D' });
+  store.clearAll();
+  expect(store.prefs.story).toEqual(DEFAULT_STORY_PREFS);
+  expect(store.prefs.age).toBe(30);
+  expect(fake.map.get('w150.prefs').story).toEqual(DEFAULT_STORY_PREFS);
 });

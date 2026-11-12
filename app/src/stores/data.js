@@ -19,12 +19,13 @@ import { ymd, weekStart, today as todayDate } from '../core/dates.js';
 import { ageGroup, activeGuide } from '../core/guide.js';
 import { calc } from '../core/rules.js';
 import { makeId, sanitizeSessions, sanitizeAge, sanitizePlan, sanitizeTracks, pruneTracks, TRACK_CAP } from '../core/sanitize.js';
+import { sanitizeStoryPrefs } from '../story/numbers.js';
 import { seedSessions, samplePlan, SAMPLE_TRACK_ID } from '../core/sample.js';
 
 export const KEYS = { meta: 'w150.meta', sessions: 'w150.sessions', plan: 'w150.plan', prefs: 'w150.prefs', breaks: 'w150.breaks', tracks: 'w150.tracks' };
 
 function defaultMeta() { return { v: 1, seeded: true, sampleActive: false }; }
-function defaultPrefs() { return { sound: false, age: null, nudge: false }; }
+function defaultPrefs() { return { sound: false, age: null, nudge: false, story: sanitizeStoryPrefs(null) }; }
 
 export const useDataStore = defineStore('data', () => {
   /* the sync store; kept out of the reactive state */
@@ -86,6 +87,7 @@ export const useDataStore = defineStore('data', () => {
     p.sound = !!p.sound;
     p.nudge = p.nudge === true;
     p.age = sanitizeAge(p.age);
+    p.story = sanitizeStoryPrefs(p.story);
     prefs.value = p;
     if (m && typeof m === 'object') {
       meta.value = { v: 1, seeded: true, sampleActive: !!m.sampleActive };
@@ -156,7 +158,7 @@ export const useDataStore = defineStore('data', () => {
     const keepAge = prefs.value.age;
     sessions.value = [];
     plan.value = null;
-    prefs.value = { sound: false, age: keepAge, nudge: false };
+    prefs.value = Object.assign(defaultPrefs(), { age: keepAge });
     tracks.value = {};
     meta.value = defaultMeta();
     [KEYS.meta, KEYS.sessions, KEYS.plan, KEYS.prefs, KEYS.breaks, KEYS.tracks].forEach(removeKey);
@@ -172,6 +174,12 @@ export const useDataStore = defineStore('data', () => {
 
   function setSound(on) {
     prefs.value.sound = !!on;
+    persist();
+  }
+
+  /* merges a patch into the saved story settings, sanitises the result and persists */
+  function setStoryPrefs(patch) {
+    prefs.value.story = sanitizeStoryPrefs(Object.assign({}, prefs.value.story, patch));
     persist();
   }
 
@@ -212,6 +220,6 @@ export const useDataStore = defineStore('data', () => {
     ready, meta, sessions, plan, prefs, tracks, today, clearSeq,
     group, guide, summary,
     attach, load, persist, addSession, removeSession, restoreSession, clearSample, clearAll,
-    setAge, setSound, savePlan, deletePlan, saveTrack, tick
+    setAge, setSound, setStoryPrefs, savePlan, deletePlan, saveTrack, tick
   };
 });
