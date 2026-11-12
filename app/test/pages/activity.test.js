@@ -52,6 +52,16 @@ describe('activity page for the sample run', function () {
     wrapper.unmount();
   });
 
+  test('Share story links to the story page and keeps from', async function () {
+    const { wrapper } = await mountActivity('/activity/sample_32?from=log');
+    const a = q('#gpx-d-story');
+    expect(a).not.toBeNull();
+    expect(a.getAttribute('href')).toBe('/story/sample_32?from=log');
+    expect(text('#gpx-d-story')).toBe('Share story');
+    expect(a.closest('.gpx-d-top')).not.toBeNull();
+    wrapper.unmount();
+  });
+
   test('from=week goes back to this week', async function () {
     const { wrapper } = await mountActivity('/activity/sample_32?from=week');
     expect(q('#activity-back').getAttribute('href')).toBe('/#splits');
@@ -180,8 +190,10 @@ describe('activity page, other states', function () {
     expect(text('#gpx-d-missing')).toBe('The route for this session is no longer stored. Your account keeps the details of the 30 most recent imports. The session stays in your log.');
     expect(q('#gpx-d-body').querySelectorAll('*')).toHaveLength(0);
     expect(q('#activity-back').getAttribute('href')).toBe('/log');
+    expect(q('#gpx-d-story')).toBeNull();
     r.wrapper.unmount();
     r = await mountActivity('/activity/l1', { sessions: sessions });
+    expect(q('#gpx-d-story')).toBeNull();
     expect(text('#gpx-d-missing')).toBe('The route for this session was not stored with the import. The session is in your log.');
     expect(q('#gpx-d-effort').className).toBe('tag tag-neutral');
     expect(text('#gpx-d-basis')).toBe('');

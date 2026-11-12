@@ -1,8 +1,8 @@
 <script setup>
 /* One activity (web/activity.html; renderActivityPage, renderDetail, setCursor and
    redrawDetailGraphics in web/js/app.js): /activity/:id?from=week|log. The header, effort and
-   notes here; stats, route, charts and splits in their components. The page keeps the one shared
-   cursor distance, so every chart and the route marker follow the same point, and announces the
+   notes here, with Share story for a run that still has its stored route; stats, route, charts and
+   splits in their components. The page keeps the one shared cursor distance, so every chart and the route marker follow the same point, and announces the
    readings in #gpx-d-live when the cursor moves by key. It sets its own document title after the
    router's afterEach, and again when the session, its name or the route changes. */
 import { ref, computed, watch } from 'vue';
@@ -11,6 +11,7 @@ import { useDataStore } from '../stores/data.js';
 import { TYPE_LABEL } from '../core/rules.js';
 import { fmtDay } from '../core/dates.js';
 import { isNum, getTrack } from '../core/gpxEffort.js';
+import { storyEligible } from '../story/model.js';
 import { TRACK_CAP } from '../core/sanitize.js';
 import { fmtStartTime } from '../core/format.js';
 import { chartSpecs, readAt } from '../core/chartMath.js';
@@ -30,6 +31,8 @@ const backText = computed(function () { return fromWeek.value ? 'Back to this we
 const session = computed(function () { return data.sessions.find(function (x) { return x.id === id.value; }) || null; });
 const rec = computed(function () { return session.value ? getTrack(session.value, data.tracks, data.prefs.age) : null; });
 const label = computed(function () { return session.value ? TYPE_LABEL[session.value.type] : ''; });
+/* Share story: a run that still has its stored route */
+const storyOk = computed(function () { return storyEligible(session.value, rec.value); });
 
 const titleText = computed(function () { return session.value ? (rec.value && rec.value.name) || label.value : ''; });
 const metaText = computed(function () {
@@ -85,6 +88,7 @@ watch(function () { return [docTitle.value, route.fullPath]; }, function () {
               <h1 class="gpx-d-title" id="gpx-d-title">{{ titleText }}</h1>
               <p class="gpx-d-meta" id="gpx-d-meta">{{ metaText }}</p>
             </div>
+            <RouterLink v-if="storyOk" id="gpx-d-story" class="btn btn-outline btn-small" :to="{ name: 'story', params: { id }, query: route.query }">Share story</RouterLink>
           </div>
           <p class="gpx-d-effort"><span :class="effortClass" id="gpx-d-effort">{{ intensity }}</span><span id="gpx-d-basis">{{ basisText }}</span></p>
           <p class="small muted" id="gpx-d-hrnote" :hidden="!hrNote">Estimated max heart rate is 220 minus your age (208 minus 0.7 x age under 18). Real maximums vary by about 10 bpm either way.</p>

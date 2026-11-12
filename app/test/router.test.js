@@ -17,6 +17,13 @@ test('guard redirects to login with next', async () => {
   expect(router.currentRoute.value.query.next).toBe('/activity/sample_32?from=log');
 });
 
+test('the story page without login goes to /login with next', async () => {
+  const { router } = setup();
+  await router.push('/story/x');
+  expect(router.currentRoute.value.path).toBe('/login');
+  expect(router.currentRoute.value.query.next).toBe('/story/x');
+});
+
 test('logged-in visitor on /login goes to next', async () => {
   const { router, auth } = setup();
   auth.user = { id: 'u1' };
@@ -34,8 +41,8 @@ test('logged-in visitor on /login without next goes to the week', async () => {
 test('route names, auth meta and unknown paths', async () => {
   const { router, auth } = setup();
   const names = router.getRoutes().map(function (r) { return r.name; }).filter(Boolean).sort();
-  expect(names).toEqual(['activity', 'check-email', 'forgot', 'log', 'login', 'register', 'reset', 'week']);
-  ['week', 'log', 'activity'].forEach(function (n) { expect(router.getRoutes().find(function (r) { return r.name === n; }).meta.auth).toBe(true); });
+  expect(names).toEqual(['activity', 'check-email', 'forgot', 'log', 'login', 'register', 'reset', 'story', 'week']);
+  ['week', 'log', 'activity', 'story'].forEach(function (n) { expect(router.getRoutes().find(function (r) { return r.name === n; }).meta.auth).toBe(true); });
   auth.user = { id: 'u1' };
   await router.push('/nowhere/at/all');
   expect(router.currentRoute.value.name).toBe('week');
