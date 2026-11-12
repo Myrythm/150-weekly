@@ -10,7 +10,12 @@ const mb = vi.hoisted(() => ({
   cancelled: 0,
   buffer: null,
   throwOnAdd: false,
-  sourceOptions: null
+  sourceOptions: null,
+  hangAfter: -1,
+  hungAdd: null,
+  hangFinalize: false,
+  cancelHangs: false,
+  addDelay: 0
 }));
 
 vi.mock('mediabunny', () => {
@@ -18,8 +23,14 @@ vi.mock('mediabunny', () => {
     constructor(opts) { this.format = opts.format; this.target = opts.target; }
     addVideoTrack() {}
     async start() {}
-    async finalize() { this.target.buffer = mb.buffer; }
-    async cancel() { mb.cancelled++; }
+    async finalize() {
+      if (mb.hangFinalize) await new Promise(() => {});
+      this.target.buffer = mb.buffer;
+    }
+    async cancel() {
+      mb.cancelled++;
+      if (mb.cancelHangs) await new Promise(() => {});
+    }
   }
   class Mp4OutputFormat { constructor(opts) { this.opts = opts; } }
   class BufferTarget { constructor() { this.buffer = null; } }
@@ -28,6 +39,12 @@ vi.mock('mediabunny', () => {
     constructor(canvas, opts) { mb.sourceOptions = opts; this.opts = opts; }
     async add(timestamp, duration) {
       if (mb.throwOnAdd) throw new Error('encoder failed');
+      if (mb.addDelay) await new Promise((resolve) => setTimeout(resolve, mb.addDelay));
+      if (mb.hangAfter >= 0 && mb.adds.length >= mb.hangAfter) {
+        /* A stalled encoder: no packet, and add() resolves only when the test releases it. */
+        await new Promise((resolve) => { mb.hungAdd = resolve; });
+        return;
+      }
       mb.adds.push([timestamp, duration]);
       if (this.opts.onEncodedPacket) this.opts.onEncodedPacket({}, {});
     }
@@ -88,6 +105,11 @@ beforeEach(() => {
   mb.buffer = null;
   mb.throwOnAdd = false;
   mb.sourceOptions = null;
+  mb.hangAfter = -1;
+  mb.hungAdd = null;
+  mb.hangFinalize = false;
+  mb.cancelHangs = false;
+  mb.addDelay = 0;
 });
 
 afterEach(() => {
@@ -192,6 +214,73 @@ test('exportVideo falls through to MediaRecorder when the encoder throws', async
   expect(out.path).toBe('recorder');
   expect(out.blob.type).toBe('video/mp4');
   expect(out.blob.size).toBeGreaterThan(0);
+});
+
+test('exportVideo falls through to MediaRecorder when add never resolves after the first packet', async () => {
+  vi.useFakeTimers();
+  noVideoApis();
+  encoderSupported(true);
+  mb.buffer = mp4Bytes();
+  mb.hangAfter = 1;
+  mb.cancelHangs = true;
+  recorderSupporting((m) => m.indexOf('video/mp4') === 0);
+  let ts = 0;
+  vi.stubGlobal('requestAnimationFrame', (cb) => { ts += 100; setTimeout(() => cb(ts), 0); return 1; });
+  const drawFrame = vi.fn();
+  const progress = [];
+  let settled = false;
+  const pending = exportVideo(fakeCanvas(), drawFrame, (p) => progress.push(p)).then((r) => { settled = true; return r; });
+  await vi.advanceTimersByTimeAsync(9000);
+  expect(settled).toBe(false);
+  expect(mb.cancelled).toBe(0);
+  expect(mb.adds.length).toBe(1);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(mb.cancelled).toBe(1);
+  await vi.advanceTimersByTimeAsync(10000);
+  const out = await pending;
+  expect(out.path).toBe('recorder');
+  expect(out.blob.type).toBe('video/mp4');
+  expect(progress[progress.length - 1]).toBe(1);
+  /* The stalled attempt must not draw or report once it is stopped, even if add() resolves late. */
+  const draws = drawFrame.mock.calls.length;
+  const reports = progress.length;
+  mb.hungAdd();
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(drawFrame.mock.calls.length).toBe(draws);
+  expect(progress.length).toBe(reports);
+  expect(mb.adds.length).toBe(1);
+});
+
+test('exportVideo gives up when finalize never finishes', async () => {
+  vi.useFakeTimers();
+  noVideoApis();
+  encoderSupported(true);
+  mb.buffer = mp4Bytes();
+  mb.hangFinalize = true;
+  let settled = false;
+  const pending = exportVideo(fakeCanvas(), vi.fn(), vi.fn()).then((r) => { settled = true; return r; });
+  await vi.advanceTimersByTimeAsync(9000);
+  expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(2000);
+  await expect(pending).resolves.toBeNull();
+  expect(mb.cancelled).toBe(1);
+});
+
+test('exportVideo gives up when the encode keeps progressing but exceeds the overall cap', async () => {
+  vi.useFakeTimers();
+  noVideoApis();
+  encoderSupported(true);
+  mb.buffer = mp4Bytes();
+  mb.addDelay = 9000;
+  let settled = false;
+  const pending = exportVideo(fakeCanvas(), vi.fn(), vi.fn()).then((r) => { settled = true; return r; });
+  await vi.advanceTimersByTimeAsync(DURATION * 24 * 1000 - 1000);
+  expect(settled).toBe(false);
+  expect(mb.cancelled).toBe(0);
+  await vi.advanceTimersByTimeAsync(3000);
+  await expect(pending).resolves.toBeNull();
+  expect(mb.cancelled).toBe(1);
+  expect(mb.adds.length).toBeLessThan(FRAMES);
 });
 
 test('exportVideo records in real time for DURATION seconds with MediaRecorder', async () => {

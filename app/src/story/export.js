@@ -17,8 +17,12 @@ const RECORDER_TYPES = ['video/mp4;codecs=avc1.640029', 'video/mp4;codecs=avc1',
 const BITRATE = 8e6;
 const WIDTH = 1080;
 const HEIGHT = 1920;
-/* The encoder must hand over its first packet within this time, or the path counts as failed. */
-const FIRST_PACKET_MS = 10000;
+/* The WebCodecs path fails when it makes no progress (no packet, no accepted frame) for this long,
+   including during finalize, or when the whole encode takes longer than the cap. */
+const STALL_MS = 10000;
+const ENCODE_CAP_MS = DURATION * 24 * 1000;
+/* How long a failed WebCodecs attempt may take to cancel before the fallback runs anyway. */
+const CANCEL_MS = 1000;
 /* Extra time a real time recording may take beyond DURATION (a hidden tab stops animation frames). */
 const RECORDER_SLACK_MS = 10000;
 const REVOKE_MS = 30000;
@@ -87,30 +91,38 @@ function reporter(onProgress) {
 async function viaWebCodecs(canvas, drawFrame, report, codec) {
   const mb = await import('mediabunny');
   const output = new mb.Output({ format: new mb.Mp4OutputFormat(), target: new mb.BufferTarget() });
-  let packets = 0;
   let stopped = false;
-  let timer;
+  let stallTimer;
+  let capTimer;
+  let fail;
+  const watchdog = new Promise(function (_, reject) { fail = reject; });
+  watchdog.catch(function () { /* only raced below */ });
+  /* Re-armed on every packet and every accepted frame; fires after STALL_MS without either. */
+  function alive() {
+    if (stopped) return;
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(function () { fail(new Error('The encoder stalled.')); }, STALL_MS);
+  }
   const source = new mb.CanvasSource(canvas, {
     codec: 'avc',
     fullCodecString: codec,
     quality: new mb.Quality({ bitrate: BITRATE }),
     keyFrameInterval: 1,
-    onEncodedPacket: function () { packets++; }
+    onEncodedPacket: alive
   });
   output.addVideoTrack(source, { frameRate: FPS });
-  const watchdog = new Promise(function (_, reject) {
-    timer = setTimeout(function () {
-      if (!packets) reject(new Error('No encoded packet arrived.'));
-    }, FIRST_PACKET_MS);
-  });
+  alive();
+  capTimer = setTimeout(function () { fail(new Error('The encode took too long.')); }, ENCODE_CAP_MS);
   const work = (async function () {
     await output.start();
-    for (let i = 0; i < FRAMES && !stopped; i++) {
+    for (let i = 0; i < FRAMES; i++) {
+      if (stopped) return;
       drawFrame(i / FPS);
       await source.add(i / FPS, 1 / FPS);
+      if (stopped) return;
+      alive();
       report((i + 1) / FRAMES);
     }
-    if (stopped) return;
     source.close();
     await output.finalize();
   })();
@@ -119,10 +131,25 @@ async function viaWebCodecs(canvas, drawFrame, report, codec) {
     await Promise.race([work, watchdog]);
   } catch (e) {
     stopped = true;
-    try { await output.cancel(); } catch (e2) { /* already closed */ }
+    clearTimeout(stallTimer);
+    clearTimeout(capTimer);
+    /* cancel() can wait on the encoder or the output lock, so it gets a short time at most. */
+    let cancelTimer;
+    const gaveUp = new Promise(function (resolve) { cancelTimer = setTimeout(resolve, CANCEL_MS); });
+    try {
+      const cancelled = Promise.resolve().then(function () { return output.cancel(); });
+      cancelled.catch(function () { /* already closed */ });
+      await Promise.race([cancelled, gaveUp]);
+    } catch (e2) {
+      /* already closed */
+    } finally {
+      clearTimeout(cancelTimer);
+    }
     return null;
   } finally {
-    clearTimeout(timer);
+    stopped = true;
+    clearTimeout(stallTimer);
+    clearTimeout(capTimer);
   }
   const buffer = output.target.buffer;
   if (!isMp4(buffer)) return null;
