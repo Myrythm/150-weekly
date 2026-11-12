@@ -4,17 +4,20 @@
  * state = { template, model, numbers: { hero, small }, color, opacity (0..100),
  *           photo: { bitmap, w, h } | null, view: { zoom, x, y } }
  * The photo (or, without one, the chosen colour) is the background; the template draws the rest.
- * Static templates ignore t.
+ * Static templates ignore t; the animated ones (C, D, E, see timeline.js) draw the frame at t seconds.
  */
 import { W, H, SAFE_TOP, SAFE_BOTTOM, drawPhoto } from './draw.js';
 import { INK } from './colors.js';
 import * as bib from './templates/bib.js';
 import * as clean from './templates/clean.js';
 import * as poster from './templates/poster.js';
+import * as splits from './templates/splits.js';
+import * as route from './templates/route.js';
+import * as weeklap from './templates/weeklap.js';
 
 export { W, H, SAFE_TOP, SAFE_BOTTOM };
 
-export const TEMPLATES = { A: bib, B: clean, F: poster };
+export const TEMPLATES = { A: bib, B: clean, C: splits, D: route, E: weeklap, F: poster };
 
 const DEFAULT_VIEW = { zoom: 1, x: 0, y: 0 };
 

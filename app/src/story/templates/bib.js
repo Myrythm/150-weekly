@@ -9,7 +9,7 @@
 import { INK, WHITE, onColor, rgba } from '../colors.js';
 import {
   W, H, SAFE_BOTTOM, FONT, drawPhoto, colorLayer, roundRectPath, numberRow, numberRowHeight, heroFit, heroLine,
-  text, brand, kicker, softShadow, setTracking, heroItem, smallItems, HERO_SCALE
+  text, brand, kicker, softShadow, setTracking, heroItem, smallRow, layerAlpha, HERO_SCALE
 } from '../draw.js';
 
 const CARD_X = 65;
@@ -31,7 +31,7 @@ const WEEK_PX = 27;
 function layout(ctx, state) {
   const cw = CARD_W - 2 * PAD_X;
   const hero = heroItem(state);
-  const items = smallItems(state).map(function (v) { return { value: v.value, label: v.label }; });
+  const items = smallRow(state);
   const px = heroFit(ctx, hero.value, hero.unit, cw, Math.round(HERO_PX * (HERO_SCALE[hero.key] || 1)));
   const L = { cw: cw, hero: hero, items: items, px: px };
   L.kickerY = PAD_TOP + 25;
@@ -56,7 +56,7 @@ function layout(ctx, state) {
 }
 
 export function draw(ctx, state) {
-  const a = Math.max(0, Math.min(100, state.opacity)) / 100;
+  const a = layerAlpha(state);
   const photo = state.photo;
   const L = layout(ctx, state);
   const cx = CARD_X + PAD_X;

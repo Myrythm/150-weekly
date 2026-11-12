@@ -10,7 +10,7 @@
 import { INK, WHITE, onColor, rgba } from '../colors.js';
 import {
   W, H, SAFE_BOTTOM, drawPhoto, colorLayer, roundRectPath, numberRow, numberRowHeight, heroFit, heroLine,
-  brand, kicker, softShadow, routeLine, heroItem, smallItems, HERO_SCALE, BRAND_PX
+  brand, kicker, softShadow, routeLine, heroItem, smallRow, layerAlpha, HERO_SCALE, BRAND_PX
 } from '../draw.js';
 
 const FRAME_X = 65;
@@ -28,14 +28,14 @@ const ROUTE_H = 229;
 const ROUTE_INSET = 43;
 
 export function draw(ctx, state) {
-  const a = Math.max(0, Math.min(100, state.opacity)) / 100;
+  const a = layerAlpha(state);
   const photo = state.photo;
   const fg = onColor(state.color);
 
   colorLayer(ctx, state.color, a, 0, 0, W, H);
 
   const hero = heroItem(state);
-  const items = smallItems(state).map(function (v) { return { value: v.value, label: v.label }; });
+  const items = smallRow(state);
   const px = heroFit(ctx, hero.value, hero.unit, BODY_W, Math.round(HERO_PX * (HERO_SCALE[hero.key] || 1)));
   const brandTop = BRAND_Y - Math.round(BRAND_PX * 0.72);
   const rowH = numberRowHeight(items.length);

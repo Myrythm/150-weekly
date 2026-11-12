@@ -9,53 +9,22 @@
  */
 import { INK, WHITE, onColor, rgba } from '../colors.js';
 import {
-  W, H, SAFE_TOP, SAFE_BOTTOM, FONT, colorLayer, heroFit, heroLine, text, textWidth, fitFont, brand, kicker,
-  softShadow, routeLine, shade, heroItem, smallItems, HERO_SCALE, BRAND_PX
+  W, H, SAFE_TOP, SAFE_BOTTOM, colorLayer, heroFit, heroLine, brand, kicker, softShadow, routeLine, shade,
+  heroItem, smallRow, layerAlpha, inlineLines, drawInline, INLINE, HERO_SCALE, BRAND_PX
 } from '../draw.js';
 
 const BODY_X = 76;
 const BODY_W = W - 2 * BODY_X;
 const HERO_PX = 421;
-const VALUE_PX = 92;
-const UNIT_PX = 32;
-const UNIT_GAP = 11;
-const ITEM_GAP = 50;
-const LINE_H = 106;
-const LINE_BASE = 81;
+const LINE_H = INLINE.lineH;
+const LINE_BASE = INLINE.lineBase;
 const BRAND_Y = SAFE_BOTTOM - 8;
 const ROUTE_W = 259;
 const ROUTE_H = 290;
 const SCRIM_FROM = 0.38;
 
-/* The small numbers as inline items, wrapped into lines that fit the body width. */
-function inlineLines(ctx, values) {
-  const lines = [];
-  let line = [], used = 0;
-  values.forEach(function (v) {
-    const unit = v.label.toLowerCase();
-    const wu = textWidth(ctx, unit, UNIT_PX, FONT.mono, 500);
-    let vpx = VALUE_PX;
-    if (textWidth(ctx, v.value, vpx, FONT.display, 600) + UNIT_GAP + wu > BODY_W) {
-      vpx = fitFont(ctx, v.value, BODY_W - UNIT_GAP - wu, VALUE_PX, FONT.display, 600);
-    }
-    const wv = textWidth(ctx, v.value, vpx, FONT.display, 600);
-    const item = { value: v.value, unit: unit, vpx: vpx, wv: wv, w: wv + UNIT_GAP + wu };
-    const need = line.length ? used + ITEM_GAP + item.w : item.w;
-    if (line.length && need > BODY_W) {
-      lines.push(line);
-      line = [item];
-      used = item.w;
-    } else {
-      line.push(item);
-      used = need;
-    }
-  });
-  if (line.length) lines.push(line);
-  return lines;
-}
-
 export function draw(ctx, state) {
-  const a = Math.max(0, Math.min(100, state.opacity)) / 100;
+  const a = layerAlpha(state);
   const photo = state.photo;
   const fg = photo ? WHITE : onColor(state.color);
 
@@ -74,7 +43,7 @@ export function draw(ctx, state) {
 
   const hero = heroItem(state);
   const px = heroFit(ctx, hero.value, hero.unit, BODY_W, Math.round(HERO_PX * (HERO_SCALE[hero.key] || 1)));
-  const lines = inlineLines(ctx, smallItems(state));
+  const lines = inlineLines(ctx, smallRow(state), BODY_W);
   const brandTop = BRAND_Y - Math.round(BRAND_PX * 0.72);
   let heroBottom = brandTop - 43;
   let inlineTop = 0;
@@ -91,15 +60,7 @@ export function draw(ctx, state) {
   if (photo) softShadow(ctx, rgba(INK, 0.4), 24, 4);
   kicker(ctx, state.model.kicker, BODY_X, kickerY, BODY_W, fg);
   heroLine(ctx, hero.value, hero.unit, BODY_X, heroY, px, fg);
-  lines.forEach(function (line, i) {
-    const y = inlineTop + i * LINE_H + LINE_BASE;
-    let x = BODY_X;
-    line.forEach(function (it) {
-      text(ctx, it.value, x, y, it.vpx, FONT.display, 600, fg);
-      text(ctx, it.unit, x + it.wv + UNIT_GAP, y, UNIT_PX, FONT.mono, 500, fg, 0.8);
-      x += it.w + ITEM_GAP;
-    });
-  });
+  drawInline(ctx, lines, BODY_X, inlineTop, fg);
   brand(ctx, BODY_X, BRAND_Y, fg, 0.85);
   ctx.restore();
 }

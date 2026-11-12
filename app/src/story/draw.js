@@ -160,18 +160,31 @@ export function heroLine(ctx, value, unit, x, y, px, color) {
   text(ctx, unit, ux, y, upx, FONT.display, 800, color);
 }
 
-/* The route outline fitted into the box, one sub path per segment (track.brk starts a new one). */
-export function routeLine(ctx, track, x, y, w, h, color, lineWidth) {
-  if (!track || !track.lat || !track.lon) return;
-  const p = routePath(track, w, h);
-  if (p.pts.length < 2) return;
+function breakSet(track) {
   const brk = {};
   (track.brk || []).forEach(function (b) { brk[b] = true; });
-  ctx.save();
+  return brk;
+}
+
+function routeStyle(ctx, color, lineWidth) {
   ctx.strokeStyle = color;
   ctx.lineWidth = lineWidth;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
+}
+
+function hasRoute(track) {
+  return !!track && Array.isArray(track.lat) && Array.isArray(track.lon);
+}
+
+/* The route outline fitted into the box, one sub path per segment (track.brk starts a new one). */
+export function routeLine(ctx, track, x, y, w, h, color, lineWidth) {
+  if (!hasRoute(track)) return;
+  const p = routePath(track, w, h);
+  if (p.pts.length < 2) return;
+  const brk = breakSet(track);
+  ctx.save();
+  routeStyle(ctx, color, lineWidth);
   ctx.beginPath();
   p.pts.forEach(function (pt, i) {
     if (i === 0 || brk[i]) ctx.moveTo(x + pt[0], y + pt[1]);
@@ -179,6 +192,49 @@ export function routeLine(ctx, track, x, y, w, h, color, lineWidth) {
   });
   ctx.stroke();
   ctx.restore();
+}
+
+/* The route from its start up to fraction frac (0..1) of its length, measured along routePath's cum.
+   A segment start (track.brk) begins a new sub path; a gap is never joined by a line. Returns the
+   canvas point where the drawn part ends (the start at frac 0), or null without a route. */
+export function routePartial(ctx, track, x, y, w, h, frac, color, lineWidth) {
+  if (!hasRoute(track)) return null;
+  const p = routePath(track, w, h);
+  if (!p.pts.length) return null;
+  const brk = breakSet(track);
+  const len = Math.max(0, Math.min(1, frac || 0)) * p.total;
+  let end = p.pts[0];
+  let drew = false;
+  ctx.save();
+  routeStyle(ctx, color, lineWidth);
+  ctx.beginPath();
+  for (let i = 0; i < p.pts.length; i++) {
+    const pt = p.pts[i];
+    if (i === 0 || brk[i]) {
+      if (i > 0 && !(p.cum[i] < len)) break;
+      ctx.moveTo(x + pt[0], y + pt[1]);
+      end = pt;
+      continue;
+    }
+    if (p.cum[i] <= len) {
+      ctx.lineTo(x + pt[0], y + pt[1]);
+      end = pt;
+      drew = true;
+      continue;
+    }
+    const prev = p.pts[i - 1];
+    const seg = p.cum[i] - p.cum[i - 1];
+    const f = seg > 0 ? (len - p.cum[i - 1]) / seg : 0;
+    if (f > 0) {
+      end = [prev[0] + (pt[0] - prev[0]) * f, prev[1] + (pt[1] - prev[1]) * f];
+      ctx.lineTo(x + end[0], y + end[1]);
+      drew = true;
+    }
+    break;
+  }
+  if (drew) ctx.stroke();
+  ctx.restore();
+  return [x + end[0], y + end[1]];
 }
 
 /* The colour mixed with black: f of the colour, 1 - f of black (CSS color-mix(color f, #000)). */
@@ -203,6 +259,75 @@ export function smallItems(state) {
   const vals = state.model.values;
   const keys = (state.numbers && state.numbers.small) || [];
   return keys.map(function (k) { return vals[k]; }).filter(Boolean);
+}
+
+/* The small numbers as { value, label } items for a results row, chips or inline numbers. */
+export function smallRow(state) {
+  return smallItems(state).map(function (v) { return { value: v.value, label: v.label }; });
+}
+
+/* The opacity setting (0..100) as an alpha 0..1; 1 when it is not a finite number. */
+export function layerAlpha(state) {
+  const o = state ? state.opacity : undefined;
+  if (typeof o !== 'number' || !isFinite(o)) return 1;
+  return Math.max(0, Math.min(100, o)) / 100;
+}
+
+/* Draws fn() faded in and moved up into place (CSS st-up: from opacity 0 and translateY(dy)).
+   p is the eased progress 0..1: nothing is drawn at 0, and at 1 nothing is changed. */
+export function fadeUp(ctx, p, dy, fn) {
+  if (!(p > 0)) return;
+  if (p >= 1) { fn(); return; }
+  ctx.save();
+  ctx.globalAlpha = ctx.globalAlpha * p;
+  ctx.translate(0, dy * (1 - p));
+  fn();
+  ctx.restore();
+}
+
+/* Inline numbers (.st-inline): value Barlow Condensed 600 at 8.5cqw (92) with its label in lower case
+   as a mono unit 3cqw (32) at 80 percent, lines of 8.5cqw x 1.15 (106), wrapped to maxWidth. */
+export const INLINE = { valuePx: 92, unitPx: 32, unitGap: 11, itemGap: 50, lineH: 106, lineBase: 81 };
+
+export function inlineLines(ctx, values, maxWidth) {
+  const I = INLINE;
+  const lines = [];
+  let line = [], used = 0;
+  values.forEach(function (v) {
+    const unit = v.label.toLowerCase();
+    const wu = textWidth(ctx, unit, I.unitPx, FONT.mono, 500);
+    let vpx = I.valuePx;
+    if (textWidth(ctx, v.value, vpx, FONT.display, 600) + I.unitGap + wu > maxWidth) {
+      vpx = fitFont(ctx, v.value, maxWidth - I.unitGap - wu, I.valuePx, FONT.display, 600);
+    }
+    const wv = textWidth(ctx, v.value, vpx, FONT.display, 600);
+    const item = { value: v.value, unit: unit, vpx: vpx, wv: wv, w: wv + I.unitGap + wu };
+    const need = line.length ? used + I.itemGap + item.w : item.w;
+    if (line.length && need > maxWidth) {
+      lines.push(line);
+      line = [item];
+      used = item.w;
+    } else {
+      line.push(item);
+      used = need;
+    }
+  });
+  if (line.length) lines.push(line);
+  return lines;
+}
+
+/* Draws inlineLines() output; top is the top of the first line. */
+export function drawInline(ctx, lines, x, top, color) {
+  const I = INLINE;
+  lines.forEach(function (line, i) {
+    const y = top + i * I.lineH + I.lineBase;
+    let lx = x;
+    line.forEach(function (it) {
+      text(ctx, it.value, lx, y, it.vpx, FONT.display, 600, color);
+      text(ctx, it.unit, lx + it.wv + I.unitGap, y, I.unitPx, FONT.mono, 500, color, 0.8);
+      lx += it.w + I.itemGap;
+    });
+  });
 }
 
 /* Main number scale per kind, as in the mockup (--st-hs). */
