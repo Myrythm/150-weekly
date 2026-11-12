@@ -418,6 +418,24 @@ describe('story page, late photos and exports', function () {
     wrapper.unmount();
   });
 
+  test('a bad file after a good photo shows the error and keeps the good photo', async function () {
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    const A = fakePhoto();
+    photoMod.loadPhoto.mockImplementationOnce(() => Promise.resolve(A));
+    await pick(wrapper, 'a.jpg');
+    await flushPromises();
+    expect(q('#story-canvas').getAttribute('aria-label')).toMatch(/ With your photo\.$/);
+    photoMod.loadPhoto.mockImplementationOnce(() => Promise.reject(new Error('decode-failed')));
+    await pick(wrapper, 'note.jpg');
+    await flushPromises();
+    expect(text('#story-photo-error')).toBe('That file could not be read as a picture. Try a JPG or PNG.');
+    expect(q('#story-canvas').getAttribute('aria-label')).toMatch(/ With your photo\.$/);
+    expect(photoMod.releasePhoto).not.toHaveBeenCalledWith(A);
+    expect(q('#story-nophoto').disabled).toBe(false);
+    expect(lastImage()).toBe(A.bitmap);
+    wrapper.unmount();
+  });
+
   test('No photo during a load, or a move to another run, drops the load', async function () {
     const d1 = deferred(), d2 = deferred();
     const { wrapper, router } = await mountStory('/story/r1', twoRuns);
@@ -502,7 +520,68 @@ describe('story page, late photos and exports', function () {
   });
 });
 
+describe('story page, fonts before the export', function () {
+  test('Create waits for the story fonts before the first frame', async function () {
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    const df = deferred();
+    const load = vi.fn(() => df.promise);
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load } });
+    try {
+      await wrapper.find('#story-create').trigger('click');
+      await flushPromises();
+      expect(load).toHaveBeenCalled();
+      expect(q('#story-create').disabled).toBe(true);
+      expect(exp.exportPng).not.toHaveBeenCalled();
+      df.resolve([]);
+      await flushPromises();
+      expect(exp.exportPng).toHaveBeenCalledTimes(1);
+      expect(q('#story-download')).not.toBeNull();
+    } finally {
+      Object.defineProperty(document, 'fonts', { configurable: true, value: { load: function () { return Promise.resolve([]); } } });
+      wrapper.unmount();
+    }
+  });
+
+  test('an export whose run changed while the fonts loaded makes no file', async function () {
+    const { wrapper, router } = await mountStory('/story/r1', twoRuns);
+    const df = deferred();
+    Object.defineProperty(document, 'fonts', { configurable: true, value: { load: vi.fn(() => df.promise) } });
+    try {
+      await wrapper.find('#story-create').trigger('click');
+      await router.push('/story/r5');
+      await flushPromises();
+      df.resolve([]);
+      await flushPromises();
+      expect(exp.exportPng).not.toHaveBeenCalled();
+      expect(q('#story-create').disabled).toBe(false);
+      expect(q('#story-download')).toBeNull();
+      expect(text('#story-status')).toBe('');
+    } finally {
+      Object.defineProperty(document, 'fonts', { configurable: true, value: { load: function () { return Promise.resolve([]); } } });
+      wrapper.unmount();
+    }
+  });
+});
+
 describe('story page, text alternative on Week lap', function () {
+  test('cadence is read as spm', async function () {
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    await wrapper.find('#story-num-cad').trigger('click');
+    expect(q('#story-canvas').getAttribute('aria-label')).toMatch(/, cadence \d+ spm\.$/);
+    wrapper.unmount();
+  });
+
+  test('E with 4 small numbers notes that only the first 3 are shown', async function () {
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    await wrapper.find('#story-tpl-E').trigger('click');
+    expect(q('#story-num-e-note')).toBeNull();
+    await wrapper.find('#story-num-best').trigger('click');
+    expect(text('#story-num-e-note')).toBe('Week lap shows the first 3.');
+    await wrapper.find('#story-tpl-A').trigger('click');
+    expect(q('#story-num-e-note')).toBeNull();
+    wrapper.unmount();
+  });
+
   test('E names the main number and at most 3 small numbers, as it draws them', async function () {
     const { wrapper } = await mountStory('/story/sample_32?from=log');
     await wrapper.find('#story-num-best').trigger('click');

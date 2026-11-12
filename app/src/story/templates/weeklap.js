@@ -36,7 +36,6 @@ const DAY_GAP = 16;
 const DAY_BAR = 24;
 const DAY_PX = 26;
 const LAST_BASELINE = SAFE_BOTTOM - 8;
-const SLIDE = 54;
 
 const T_RUN = 0.3;
 const T_RUN_LEN = 2.3;
@@ -172,7 +171,8 @@ export function draw(ctx, state, t) {
 
   if (!week) return;
 
-  fadeUp(ctx, today, SLIDE, function () {
+  /* the tag slides up by its own gap at most, so it never covers the first number line */
+  fadeUp(ctx, today, TAG_GAP, function () {
     ctx.save();
     ctx.fillStyle = hl.fill;
     ctx.fillRect(BODY_X, L.tagTop, L.tagW, L.tagH);

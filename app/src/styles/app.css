@@ -690,6 +690,8 @@ img, svg { max-width: 100%; }
 .story-tpl-kind { font-family: var(--font-mono); font-weight: 500; font-size: 11px; line-height: 1.3; text-transform: uppercase; letter-spacing: 0.06em; }
 .story-tpl-why { display: block; }
 .story-file:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* the photo button is a label, so the fieldset's disabled state does not grey it by itself */
+.story-group:disabled .story-file { opacity: 0.45; cursor: not-allowed; }
 .story-range { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); min-width: 0; }
 .story-range input[type="range"] { flex: 1 1 160px; min-width: 0; max-width: 320px; min-height: 44px; margin: 0; accent-color: var(--track-fill); }
 .story-range input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }

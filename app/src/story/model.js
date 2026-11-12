@@ -25,6 +25,7 @@ const BLOCK_KM = 5;
 const SLOW_FRAC = 0.55;
 export const REASON_C = 'Needs at least 2 full km.';
 export const REASON_E = 'Needs a weekly target. Set your age first.';
+export const REASON_E_AGE = 'Needs a weekly target for your age.';
 
 function pointCount(rec) {
   const t = rec && rec.track;
@@ -65,20 +66,36 @@ function splitTime(x) {
   return isNum(x.timeS) ? x.timeS : x.paceSPerKm * x.distanceM / 1000;
 }
 
-/* One lane per full km up to 10; above that, complete 5 km blocks. Fewer than 2 lanes: none. */
+function fullSplit(x) {
+  return !!x && !x.partial && isNum(x.paceSPerKm) && x.paceSPerKm > 0;
+}
+
+/* One lane per full km up to 10, labelled with the split's own km index; above that, complete 5 km
+   blocks by index (block k holds km 5k-4 to 5k) and a block with a km that is missing, has no pace
+   or is partial is left out. Fewer than 2 lanes: none. */
 export function lanes(m) {
-  const sp = (m && Array.isArray(m.splits) ? m.splits : []).filter(function (x) {
-    return x && !x.partial && isNum(x.paceSPerKm) && x.paceSPerKm > 0;
-  });
+  const all = m && Array.isArray(m.splits) ? m.splits : [];
+  const sp = all.filter(fullSplit);
   let rows;
   if (sp.length <= MAX_KM_LANES) {
-    rows = sp.map(function (x, i) { return { label: String(i + 1), pace: x.paceSPerKm }; });
+    rows = sp.map(function (x, i) { return { label: String(isNum(x.index) ? x.index : i + 1), pace: x.paceSPerKm }; });
   } else {
+    const byIndex = {};
+    let last = 0;
+    all.forEach(function (x) {
+      if (!x || !isNum(x.index)) return;
+      (byIndex[x.index] = byIndex[x.index] || []).push(x);
+      if (fullSplit(x)) last = Math.max(last, x.index);
+    });
     rows = [];
-    for (let i = 0; i + BLOCK_KM <= sp.length; i += BLOCK_KM) {
-      let t = 0, d = 0;
-      for (let j = i; j < i + BLOCK_KM; j++) { t += splitTime(sp[j]); d += sp[j].distanceM; }
-      rows.push({ label: String(i + BLOCK_KM), pace: d > 0 ? t / (d / 1000) : NaN });
+    for (let end = BLOCK_KM; end <= last; end += BLOCK_KM) {
+      let t = 0, d = 0, whole = true;
+      for (let k = end - BLOCK_KM + 1; k <= end; k++) {
+        const at = byIndex[k];
+        if (!at || !at.every(fullSplit)) { whole = false; break; }
+        at.forEach(function (x) { t += splitTime(x); d += x.distanceM; });
+      }
+      if (whole) rows.push({ label: String(end), pace: d > 0 ? t / (d / 1000) : NaN });
     }
     rows = rows.filter(function (r) { return isNum(r.pace) && r.pace > 0; });
   }
@@ -133,12 +150,13 @@ const OK = function () { return { ok: true }; };
 export function templateState(model) {
   const hasLanes = !!model && Array.isArray(model.lanes) && model.lanes.length >= 2;
   const hasWeek = !!model && !!model.week;
+  const reasonE = model && model.ageSet ? REASON_E_AGE : REASON_E;
   return {
     A: OK(),
     B: OK(),
     C: hasLanes ? OK() : { ok: false, reason: REASON_C },
     D: OK(),
-    E: hasWeek ? OK() : { ok: false, reason: REASON_E },
+    E: hasWeek ? OK() : { ok: false, reason: reasonE },
     F: OK()
   };
 }
@@ -158,6 +176,8 @@ export function buildModel(session, rec, sessions, age) {
     dateText: dateText,
     values: numberValues(rec.metrics),
     week: weekNumbers(session, sessions, age),
+    /* an age is set (E's reason then names the age group, not the missing age) */
+    ageSet: ageGroup(age) !== 'unset',
     lanes: lanes(rec.metrics),
     track: rec.track,
     templates: null

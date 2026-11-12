@@ -15,6 +15,9 @@ export const PRESETS = [
   { id: 'paper', name: 'Paper white', hex: '#F1F2EE' },
 ];
 
+// The story colour before the person picks one: the first preset.
+export const DEFAULT_COLOR = PRESETS[0].hex;
+
 function channels(hex) {
   const value = hex.replace('#', '');
   return [0, 2, 4].map((i) => parseInt(value.slice(i, i + 2), 16));
@@ -44,4 +47,13 @@ export function highlight(hex) {
 export function rgba(hex, alpha) {
   const [r, g, b] = channels(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// The colour mixed with black: f of the colour, 1 - f of black (CSS color-mix(color f, #000)).
+export function shade(hex, f) {
+  const out = channels(hex).map(function (c) {
+    const v = Math.round(c * f);
+    return (v < 16 ? '0' : '') + v.toString(16);
+  });
+  return ('#' + out.join('')).toUpperCase();
 }

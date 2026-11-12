@@ -6,6 +6,7 @@
 import { computed } from 'vue';
 import { NUMBER_KEYS, HERO_KEYS, MAX_SMALL } from '../story/numbers.js';
 import { PRESETS } from '../story/colors.js';
+import { MAX_NUMBERS as WEEKLAP_MAX_NUMBERS } from '../story/templates/weeklap.js';
 
 const props = defineProps({
   templates: { type: Array, required: true },     /* [{ id, name, animated, ok, reason }] */
@@ -32,6 +33,9 @@ const unavailable = computed(function () { return props.templates.filter(functio
 const colorUpper = computed(function () { return String(props.color).toUpperCase(); });
 const colorInput = computed(function () { return String(props.color).toLowerCase(); });
 const countText = computed(function () { return props.numbers.small.length + ' of ' + MAX_SMALL + ' small numbers used.'; });
+/* Week lap draws the main number and at most WEEKLAP_MAX_NUMBERS - 1 small ones */
+const weekLapCut = computed(function () { return props.template === 'E' && props.numbers.small.length > WEEKLAP_MAX_NUMBERS - 1; });
+const weekLapNote = computed(function () { return 'Week lap shows the first ' + (WEEKLAP_MAX_NUMBERS - 1) + '.'; });
 
 function has(k) { return !!props.values[k]; }
 function isSmall(k) { return props.numbers.small.indexOf(k) >= 0; }
@@ -136,11 +140,12 @@ function onFile(e) {
           :id="'story-num-' + k"
           :aria-pressed="isSmall(k) ? 'true' : 'false'"
           :disabled="!has(k) || numbers.hero === k"
-          aria-describedby="story-num-count"
+          :aria-describedby="weekLapCut ? 'story-num-count story-num-e-note' : 'story-num-count'"
           @click="emit('small', k)"
         >{{ NUM_LABEL[k] }}</button>
       </div>
       <p class="small muted" id="story-num-count">{{ countText }}</p>
+      <p class="small muted" id="story-num-e-note" v-if="weekLapCut">{{ weekLapNote }}</p>
       <p><button type="button" class="btn-text" id="story-num-rec" @click="emit('recommended')">Back to recommended</button></p>
     </fieldset>
 

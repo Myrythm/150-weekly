@@ -7,9 +7,9 @@
  * body inset 7cqw (76), hero 39cqw (421), inline numbers 8.5cqw (92) with mono units 3cqw (32),
  * route 24cqw wide (259) at 7cqw from the right.
  */
-import { INK, WHITE, onColor, rgba } from '../colors.js';
+import { INK, WHITE, onColor, rgba, shade } from '../colors.js';
 import {
-  W, H, SAFE_TOP, SAFE_BOTTOM, colorLayer, heroFit, heroLine, brand, kicker, softShadow, routeLine, shade,
+  W, H, SAFE_TOP, SAFE_BOTTOM, colorLayer, heroFit, heroLine, brand, kicker, softShadow, routeLine,
   heroItem, smallRow, layerAlpha, inlineLines, drawInline, INLINE, HERO_SCALE, BRAND_PX
 } from '../draw.js';
 

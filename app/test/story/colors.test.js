@@ -1,4 +1,5 @@
-import { PRESETS, INK, WHITE, luminance, onColor, highlight, rgba } from '../../src/story/colors.js';
+import { PRESETS, INK, WHITE, DEFAULT_COLOR, luminance, onColor, highlight, rgba, shade } from '../../src/story/colors.js';
+import { DEFAULT_STORY_PREFS } from '../../src/story/numbers.js';
 
 test('presets keep the agreed order, ids, names and hex values', () => {
   expect(PRESETS).toEqual([
@@ -45,4 +46,17 @@ test('luminance uses WCAG relative luminance at the extremes', () => {
 
 test('rgba turns a hex colour into an rgba string', () => {
   expect(rgba('#1E4FA0', 0.5)).toBe('rgba(30, 79, 160, 0.5)');
+});
+
+test('the default story colour is the first preset, and the saved settings start from it', () => {
+  expect(DEFAULT_COLOR).toBe('#1E4FA0');
+  expect(DEFAULT_COLOR).toBe(PRESETS[0].hex);
+  expect(DEFAULT_STORY_PREFS.color).toBe(DEFAULT_COLOR);
+});
+
+test('shade mixes the colour with black', () => {
+  expect(shade('#1E4FA0', 1)).toBe('#1E4FA0');
+  expect(shade('#1E4FA0', 0)).toBe('#000000');
+  expect(shade('#1e4fa0', 0.4)).toBe('#0C2040');
+  expect(shade('#FFFFFF', 0.5)).toBe('#808080');
 });

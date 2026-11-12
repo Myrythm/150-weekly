@@ -407,6 +407,21 @@ test('D: a break in the track starts a new sub path and is never joined by a lin
   expect(mid.calls.filter(c => c.op === 'moveTo')).toHaveLength(3);
 });
 
+test('E: the sliding tag never comes lower than its gap above the numbers', () => {
+  const tagRect = (t) => {
+    const ctx = makeCtx();
+    drawStory(ctx, state('E'), t);
+    const rects = ctx.calls.filter(c => c.op === 'fillRect' && c.fillStyle === '#E8A317');
+    return rects.reduce((a, b) => (b.y < a.y ? b : a));
+  };
+  const final = tagRect(5);
+  [2.61, 2.7, 2.8, 2.95].forEach(t => {
+    const r = tagRect(t);
+    expect(r.y).toBeGreaterThanOrEqual(final.y);
+    expect(r.y + r.h).toBeLessThanOrEqual(final.y + final.h + 32);
+  });
+});
+
 test('E: the run part uses the highlight colour; above the target the lap stops full and the counter ends at the true value', () => {
   const ctx = makeCtx();
   drawStory(ctx, state('E'), 5);

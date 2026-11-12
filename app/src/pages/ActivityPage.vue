@@ -2,9 +2,10 @@
 /* One activity (web/activity.html; renderActivityPage, renderDetail, setCursor and
    redrawDetailGraphics in web/js/app.js): /activity/:id?from=week|log. The header, effort and
    notes here, with Share story for a run that still has its stored route; stats, route, charts and
-   splits in their components. The page keeps the one shared cursor distance, so every chart and the route marker follow the same point, and announces the
-   readings in #gpx-d-live when the cursor moves by key. It sets its own document title after the
-   router's afterEach, and again when the session, its name or the route changes. */
+   splits in their components. The page keeps the one shared cursor distance, so every chart and
+   the route marker follow the same point, and announces the readings in #gpx-d-live when the
+   cursor moves by key. It sets its own document title after the router's afterEach, and again
+   when the session, its name or the route changes. */
 import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useDataStore } from '../stores/data.js';

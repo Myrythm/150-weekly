@@ -41,6 +41,11 @@ test('no age or under 5: no week numbers, E unavailable, A still ok', () => {
   expect(t.A).toEqual({ ok: true });
   expect(templateState(buildModel(sessions[3], rec(fiveKm), sessions, 3)).E.ok).toBe(false);
 });
+test('an age without a weekly target: E names the age, not "Set your age first"', () => {
+  const t = templateState(buildModel(sessions[3], rec(fiveKm), sessions, 3));
+  expect(t.E).toEqual({ ok: false, reason: 'Needs a weekly target for your age.' });
+  expect(templateState(buildModel(sessions[3], rec(fiveKm), sessions, undefined)).E.reason).toBe('Needs a weekly target. Set your age first.');
+});
 
 test('lanes: one per full km, fastest is best', () => {
   const l = lanes(fiveKm);
@@ -85,6 +90,27 @@ test('lanes: 1 full km or no splits give none, and C is unavailable', () => {
   expect(lanes(routeOnly)).toEqual([]);
   expect(lanes({})).toEqual([]);
   expect(templateState(buildModel(sessions[3], rec(routeOnly), sessions, 30)).C).toEqual({ ok: false, reason: 'Needs at least 2 full km.' });
+});
+test('lanes: a km label is the own index of the split, also when a km before it is missing', () => {
+  const noPace = (index) => ({ index, distanceM: 1000, timeS: null, paceSPerKm: null, partial: false });
+  const l = lanes({ splits: [split(1, 400), noPace(2), split(3, 390), split(4, 380)] });
+  expect(l.map(x => x.label)).toEqual(['1', '3', '4']);
+});
+test('lanes: 5 km blocks follow the split index and drop a block with a gap', () => {
+  const noPace = (index) => ({ index, distanceM: 1000, timeS: null, paceSPerKm: null, partial: false });
+  const sp = [];
+  for (let i = 1; i <= 16; i++) sp.push(i === 7 ? noPace(7) : split(i, i <= 5 ? 400 : i <= 10 ? 390 : 380));
+  sp.push(split(17, 370, true));
+  const l = lanes({ splits: sp });
+  /* 15 full km, so blocks: 1..5 and 11..15; 6..10 holds the km without a pace; 16 is no full block */
+  expect(l.map(x => x.label)).toEqual(['5', '15']);
+  expect(l.map(x => x.paceText)).toEqual(['6:40', '6:20']);
+});
+test('lanes: a block that holds a partial split is dropped', () => {
+  const sp = [];
+  for (let i = 1; i <= 15; i++) sp.push(split(i, 400 - i, i === 12));
+  const l = lanes({ splits: sp });
+  expect(l.map(x => x.label)).toEqual(['5', '10']);
 });
 test('lanes: splits without a pace are not full', () => {
   expect(lanes({ splits: [split(1, 400), { index: 2, distanceM: 1000, timeS: null, paceSPerKm: null, partial: false }] })).toEqual([]);

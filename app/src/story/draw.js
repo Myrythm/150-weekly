@@ -237,16 +237,6 @@ export function routePartial(ctx, track, x, y, w, h, frac, color, lineWidth) {
   return [x + end[0], y + end[1]];
 }
 
-/* The colour mixed with black: f of the colour, 1 - f of black (CSS color-mix(color f, #000)). */
-export function shade(hex, f) {
-  const v = hex.replace('#', '');
-  const out = [0, 2, 4].map(function (i) {
-    const c = Math.round(parseInt(v.slice(i, i + 2), 16) * f);
-    return (c < 16 ? '0' : '') + c.toString(16);
-  });
-  return ('#' + out.join('')).toUpperCase();
-}
-
 /* The main number and small numbers chosen in state.numbers, as display items. */
 export function heroItem(state) {
   const vals = state.model.values;

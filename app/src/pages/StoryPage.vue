@@ -20,6 +20,7 @@ import { TEMPLATE_IDS, resolveNumbers, toggleSmall, DEFAULT_STORY_PREFS } from '
 import { drawStory, W, H } from '../story/render.js';
 import { DURATION, isAnimated } from '../story/timeline.js';
 import { loadPhoto, releasePhoto } from '../story/photo.js';
+import { loadStoryFonts } from '../story/fonts.js';
 import { exportPng, exportVideo, storyFileName, canShareFile, shareFile, downloadBlob } from '../story/export.js';
 import { MAX_NUMBERS as WEEKLAP_MAX_NUMBERS } from '../story/templates/weeklap.js';
 import StoryCanvas from '../components/StoryCanvas.vue';
@@ -35,7 +36,7 @@ const SPOKEN = {
   best: function (v) { return 'best km ' + v.value + ' per km'; },
   maxhr: function (v) { return 'max heart rate ' + v.value + ' bpm'; },
   climb: function (v) { return 'climb ' + v.value.replace(/^\+/, '') + ' m'; },
-  cad: function (v) { return 'cadence ' + v.value + ' steps per minute'; }
+  cad: function (v) { return 'cadence ' + v.value + ' spm'; }
 };
 const MSG_NO_VIDEO = 'This browser cannot make a video that Instagram accepts. Here is the picture instead.';
 const MSG_IOS = 'Saved to Files, in Downloads.';
@@ -194,6 +195,8 @@ async function onCreate() {
   canShare.value = false;
   const video = isAnimated(snap.template);
   status.value = video ? 'Creating the video. 0%' : 'Creating the picture.';
+  /* the first frame must not be drawn in a fallback face */
+  await loadStoryFonts();
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -204,6 +207,8 @@ async function onCreate() {
   };
   let blob = null, ext = 'png', text = 'Your picture is ready.';
   try {
+    /* the page may have moved on while the fonts loaded */
+    if (!alive || mine !== gen) throw staleExport();
     if (video) {
       const out = await exportVideo(canvas, drawFrame, function (p) {
         /* in steps of 10 percent, so a screen reader is not flooded */

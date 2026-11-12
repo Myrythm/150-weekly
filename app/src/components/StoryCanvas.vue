@@ -10,6 +10,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { drawStory, W, H } from '../story/render.js';
 import { DURATION } from '../story/timeline.js';
 import { coverRect } from '../story/photo.js';
+import { loadStoryFonts } from '../story/fonts.js';
 import { reduced } from '../core/motion.js';
 
 const props = defineProps({
@@ -21,7 +22,6 @@ const props = defineProps({
 });
 const emit = defineEmits(['move']);
 
-const FONTS = ['600 40px "Barlow Condensed"', '700 40px "Barlow Condensed"', '800 40px "Barlow Condensed"', '500 40px "IBM Plex Mono"'];
 const KEY_STEP = 0.1;
 
 const canvas = ref(null);
@@ -102,19 +102,13 @@ function onMotion(e) {
   refresh();
 }
 
-function loadFonts() {
-  const f = typeof document !== 'undefined' ? document.fonts : null;
-  if (!f || typeof f.load !== 'function') return Promise.resolve();
-  return Promise.all(FONTS.map(function (spec) { return f.load(spec); })).catch(function () {});
-}
-
 onMounted(function () {
   try {
     mql = window.matchMedia('(prefers-reduced-motion: reduce)');
     if (mql && typeof mql.addEventListener === 'function') mql.addEventListener('change', onMotion);
     else mql = null;
   } catch (e) { mql = null; }
-  loadFonts().then(function () {
+  loadStoryFonts().then(function () {
     if (!alive) return;
     fontsReady.value = true;
     refresh();

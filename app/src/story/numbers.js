@@ -5,6 +5,7 @@
 import { GPX } from '../core/gpx.js';
 import { isNum } from '../core/gpxEffort.js';
 import { fmtMinSec } from '../core/format.js';
+import { DEFAULT_COLOR } from './colors.js';
 
 export const NUMBER_KEYS = ['dist', 'time', 'pace', 'hr', 'best', 'maxhr', 'climb', 'cad'];
 export const HERO_KEYS = ['dist', 'time', 'pace'];
@@ -12,7 +13,7 @@ export const RECOMMENDED_SMALL = ['time', 'pace', 'hr'];
 export const MAX_SMALL = 4;
 export const TEMPLATE_IDS = ['A', 'B', 'C', 'D', 'E', 'F'];
 /* small: null means the recommended set */
-export const DEFAULT_STORY_PREFS = { template: 'A', color: '#1E4FA0', opacity: 100, hero: 'dist', small: null };
+export const DEFAULT_STORY_PREFS = { template: 'A', color: DEFAULT_COLOR, opacity: 100, hero: 'dist', small: null };
 
 function num(label, unit, value) { return { value: value, unit: unit, label: label }; }
 
