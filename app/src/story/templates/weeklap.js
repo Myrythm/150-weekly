@@ -86,10 +86,14 @@ function strokeLap(ctx, o, f0, f1, color, close) {
   ctx.restore();
 }
 
+/* Week lap draws the main number and the small numbers up to this many in all (the story page's
+   text alternative uses the same cap) */
+export const MAX_NUMBERS = 4;
+
 function layout(ctx, state) {
   const week = state.model.week;
   const hero = heroItem(state);
-  const items = [{ value: hero.value, label: state.model.values[hero.key].label }].concat(smallRow(state)).slice(0, 4);
+  const items = [{ value: hero.value, label: state.model.values[hero.key].label }].concat(smallRow(state)).slice(0, MAX_NUMBERS);
   const lines = inlineLines(ctx, items, BODY_W);
   const L = { week: week, lines: lines };
   L.dayLetterY = LAST_BASELINE;

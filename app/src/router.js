@@ -4,7 +4,8 @@
  *   createAppRouter(pinia, { history }?)   history defaults to createWebHistory()
  *
  * App routes (meta.auth): week `/`, log `/log`, activity `/activity/:id?from=week|log`,
- * story `/story/:id?from=week|log` (the run story for one activity).
+ * story `/story/:id?from=week|log` (the run story for one activity; loaded on first visit, so the
+ * story renderer and templates stay out of the main chunk).
  * Auth routes (meta.guest): login, register, check-email, forgot, reset; each passes ?next= on.
  * Unknown paths go to `/`.
  *
@@ -27,7 +28,6 @@ import { cleanLocation, safeNext } from './auth/link.js';
 import WeekPage from './pages/WeekPage.vue';
 import LogPage from './pages/LogPage.vue';
 import ActivityPage from './pages/ActivityPage.vue';
-import StoryPage from './pages/StoryPage.vue';
 import LoginPage from './pages/auth/LoginPage.vue';
 import RegisterPage from './pages/auth/RegisterPage.vue';
 import CheckEmailPage from './pages/auth/CheckEmailPage.vue';
@@ -50,7 +50,7 @@ export function createAppRouter(pinia, opts) {
     { path: '/', name: 'week', component: WeekPage, meta: { auth: true } },
     { path: '/log', name: 'log', component: LogPage, meta: { auth: true, title: 'Full log, Weekly 150' } },
     { path: '/activity/:id', name: 'activity', component: ActivityPage, meta: { auth: true } },
-    { path: '/story/:id', name: 'story', component: StoryPage, meta: { auth: true } },
+    { path: '/story/:id', name: 'story', component: function () { return import('./pages/StoryPage.vue'); }, meta: { auth: true } },
     { path: '/login', name: 'login', component: LoginPage, meta: { guest: true } },
     { path: '/register', name: 'register', component: RegisterPage, meta: { guest: true } },
     { path: '/check-email', name: 'check-email', component: CheckEmailPage, meta: { guest: true } },

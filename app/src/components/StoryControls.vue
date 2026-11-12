@@ -18,6 +18,7 @@ const props = defineProps({
   zoom: { type: Number, default: 1 },
   photoError: { type: Boolean, default: false },
   busy: { type: Boolean, default: false },
+  photoLoading: { type: Boolean, default: false },
   animated: { type: Boolean, default: false },
   status: { type: String, default: '' },
   ready: { type: Boolean, default: false },
@@ -146,7 +147,7 @@ function onFile(e) {
     <div class="story-group story-export" role="group" aria-labelledby="story-export-title">
       <p class="label story-legend" id="story-export-title">Export</p>
       <div class="story-row">
-        <button v-if="!ready" type="button" class="btn btn-accent" id="story-create" :disabled="busy" @click="emit('create')">{{ animated ? 'Create video' : 'Create picture' }}</button>
+        <button v-if="!ready" type="button" class="btn btn-accent" id="story-create" :disabled="busy || photoLoading" @click="emit('create')">{{ animated ? 'Create video' : 'Create picture' }}</button>
         <template v-else>
           <button v-if="canShare" type="button" class="btn btn-accent" id="story-share" @click="emit('share')">Share</button>
           <button type="button" class="btn btn-outline" id="story-download" @click="emit('download')">Download</button>

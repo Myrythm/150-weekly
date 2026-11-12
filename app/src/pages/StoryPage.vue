@@ -21,6 +21,7 @@ import { drawStory, W, H } from '../story/render.js';
 import { DURATION, isAnimated } from '../story/timeline.js';
 import { loadPhoto, releasePhoto } from '../story/photo.js';
 import { exportPng, exportVideo, storyFileName, canShareFile, shareFile, downloadBlob } from '../story/export.js';
+import { MAX_NUMBERS as WEEKLAP_MAX_NUMBERS } from '../story/templates/weeklap.js';
 import StoryCanvas from '../components/StoryCanvas.vue';
 import StoryControls from '../components/StoryControls.vue';
 
@@ -76,7 +77,10 @@ const animated = computed(function () { return isAnimated(template.value); });
 const photo = shallowRef(null);
 const view = reactive({ zoom: 1, x: 0, y: 0 });
 const photoError = ref(false);
+const photoLoading = ref(false);
 let alive = true;
+/* up on every pick, No photo, a new :id and unmount: a load that finishes under an older number is dropped */
+let photoGen = 0;
 
 const state = computed(function () {
   return {
@@ -90,10 +94,16 @@ const state = computed(function () {
   };
 });
 
+/* the numbers the template draws: Week lap (E) shows the main number and at most MAX_NUMBERS - 1 small ones */
+const shownSmall = computed(function () {
+  const small = numbers.value.small;
+  return template.value === 'E' ? small.slice(0, WEEKLAP_MAX_NUMBERS - 1) : small;
+});
+
 const canvasLabel = computed(function () {
   const m = model.value;
   if (!m) return '';
-  const parts = [numbers.value.hero].concat(numbers.value.small).map(function (k) {
+  const parts = [numbers.value.hero].concat(shownSmall.value).map(function (k) {
     return m.values[k] ? SPOKEN[k](m.values[k]) : '';
   }).filter(Boolean);
   const list = parts.join(', ');
@@ -109,17 +119,34 @@ function setPhoto(p) {
   if (old && old !== p) releasePhoto(old);
 }
 
+function current(mine) { return alive && mine === photoGen; }
+
 function onPhoto(file) {
+  const mine = ++photoGen;
+  photoLoading.value = true;
   loadPhoto(file).then(function (p) {
-    if (!alive) { releasePhoto(p); return; }
+    /* an older pick, another activity, a left page, or an export that started meanwhile: never shown */
+    if (!current(mine) || busy.value) {
+      releasePhoto(p);
+      if (current(mine)) photoLoading.value = false;
+      return;
+    }
+    photoLoading.value = false;
     photoError.value = false;
     setPhoto(p);
   }, function () {
-    if (alive) photoError.value = true;
+    if (!current(mine)) return;
+    photoLoading.value = false;
+    photoError.value = true;
   });
 }
 
-function onNoPhoto() { photoError.value = false; setPhoto(null); }
+function stopPhotoLoad() {
+  photoGen++;
+  photoLoading.value = false;
+}
+
+function onNoPhoto() { stopPhotoLoad(); photoError.value = false; setPhoto(null); }
 function onZoom(z) { if (photo.value) view.zoom = Math.min(3, Math.max(1, Number(z) || 1)); }
 function onMove(v) { if (photo.value && !busy.value) { view.x = v.x; view.y = v.y; } }
 
@@ -154,8 +181,12 @@ function isIos() {
 
 function pct(p) { return Math.round(p * 100); }
 
+/* thrown by a frame of an export that the page no longer wants, so exportVideo's attempts end early */
+function staleExport() { return new Error('The export is no longer wanted.'); }
+
 async function onCreate() {
-  if (busy.value || !model.value) return;
+  /* one export at a time, and never from a photo that is still loading */
+  if (busy.value || photoLoading.value || !model.value) return;
   const snap = state.value;
   const mine = ++gen;
   busy.value = true;
@@ -167,7 +198,10 @@ async function onCreate() {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const drawFrame = function (t) { if (alive) drawStory(ctx, snap, t); };
+  const drawFrame = function (t) {
+    if (!alive || mine !== gen) throw staleExport();
+    drawStory(ctx, snap, t);
+  };
   let blob = null, ext = 'png', text = 'Your picture is ready.';
   try {
     if (video) {
@@ -191,8 +225,12 @@ async function onCreate() {
   } catch (e) {
     blob = null;
   }
-  if (!alive || mine !== gen) return;
+  /* busy ends only here, when this export has really ended, so two never run at once */
+  if (!alive) return;
   busy.value = false;
+  if (mine !== gen) return;
+  /* something drawn changed while the file was made (synced data, say): the file would not match */
+  if (state.value !== snap) { discard(); return; }
   if (!blob) {
     status.value = 'The file could not be created. Try again.';
     return;
@@ -225,9 +263,9 @@ function onDownload() {
   status.value = isIos() ? readyText + ' ' + MSG_IOS : readyText;
 }
 
+/* drops the created file; an export still running is left to end by itself (its frames now throw) */
 function discard() {
   gen++;
-  busy.value = false;
   file.value = null;
   canShare.value = false;
   status.value = '';
@@ -240,6 +278,7 @@ watch(state, function () { if (file.value) discard(); });
 /* another activity in the same page instance: start clean */
 watch(id, function () {
   discard();
+  stopPhotoLoad();
   photoError.value = false;
   setPhoto(null);
 });
@@ -247,6 +286,7 @@ watch(id, function () {
 onBeforeUnmount(function () {
   alive = false;
   gen++;
+  photoGen++;
   releasePhoto(photo.value);
   photo.value = null;
 });
@@ -282,6 +322,7 @@ watch(function () { return [docTitle.value, route.fullPath]; }, function () {
               :zoom="view.zoom"
               :photo-error="photoError"
               :busy="busy"
+              :photo-loading="photoLoading"
               :animated="animated"
               :status="status"
               :ready="!!file"

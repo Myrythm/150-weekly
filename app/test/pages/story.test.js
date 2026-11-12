@@ -9,6 +9,7 @@ import { parseYmd } from '../../src/core/dates.js';
 import { seedSessions } from '../../src/core/sample.js';
 import { makeCtx } from '../story/fakeCtx.js';
 import * as exp from '../../src/story/export.js';
+import * as photoMod from '../../src/story/photo.js';
 import StoryPage from '../../src/pages/StoryPage.vue';
 
 /* the test environment has no canvas encoder: the export calls are stand-ins */
@@ -21,6 +22,12 @@ vi.mock('../../src/story/export.js', async function (importOriginal) {
     shareFile: vi.fn(function () { return Promise.resolve(); }),
     downloadBlob: vi.fn()
   });
+});
+
+/* the real photo loader by default; a test can make it resolve out of order */
+vi.mock('../../src/story/photo.js', async function (importOriginal) {
+  const real = await importOriginal();
+  return Object.assign({}, real, { loadPhoto: vi.fn(real.loadPhoto), releasePhoto: vi.fn(real.releasePhoto) });
 });
 
 const realGetContext = HTMLCanvasElement.prototype.getContext;
@@ -352,5 +359,159 @@ describe('story page, preview and export', function () {
       if (desc) Object.defineProperty(navigator, 'userAgent', desc);
       else delete navigator.userAgent;
     }
+  });
+});
+
+function deferred() {
+  const d = {};
+  d.promise = new Promise(function (resolve, reject) { d.resolve = resolve; d.reject = reject; });
+  return d;
+}
+const fakePhoto = () => ({ bitmap: { width: 800, height: 1200, close: vi.fn() }, w: 800, h: 1200 });
+async function pick(wrapper, name) {
+  const input = q('#story-photo');
+  Object.defineProperty(input, 'files', { configurable: true, value: [new File(['x'], name, { type: 'image/jpeg' })] });
+  await wrapper.find('#story-photo').trigger('change');
+}
+const lastImage = () => {
+  const c = contexts[0].calls.filter((x) => x.op === 'drawImage');
+  return c.length ? c[c.length - 1].args[0] : null;
+};
+const twoRuns = { sessions: [S('r1', 'run', 't_one'), S('r5', 'run', 't_five')], tracks: { t_one: oneKm, t_five: oneKm } };
+
+describe('story page, late photos and exports', function () {
+  test('an older pick that finishes last is dropped and released; Create waits for the load', async function () {
+    const d1 = deferred(), d2 = deferred();
+    photoMod.loadPhoto.mockImplementationOnce(() => d1.promise).mockImplementationOnce(() => d2.promise);
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    await pick(wrapper, 'a.jpg');
+    await pick(wrapper, 'b.jpg');
+    expect(q('#story-create').disabled).toBe(true);
+    const A = fakePhoto(), B = fakePhoto();
+    d2.resolve(B);
+    await flushPromises();
+    expect(q('#story-create').disabled).toBe(false);
+    expect(lastImage()).toBe(B.bitmap);
+    d1.resolve(A);
+    await flushPromises();
+    expect(photoMod.releasePhoto).toHaveBeenCalledWith(A);
+    expect(photoMod.releasePhoto).not.toHaveBeenCalledWith(B);
+    expect(q('#story-nophoto').disabled).toBe(false);
+    expect(q('#story-canvas').getAttribute('aria-label')).toMatch(/ With your photo\.$/);
+    expect(lastImage()).toBe(B.bitmap);
+    wrapper.unmount();
+    expect(photoMod.releasePhoto).toHaveBeenCalledWith(B);
+  });
+
+  test('a late failure of an older pick shows no error over a good photo', async function () {
+    const d1 = deferred(), d2 = deferred();
+    photoMod.loadPhoto.mockImplementationOnce(() => d1.promise).mockImplementationOnce(() => d2.promise);
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    await pick(wrapper, 'a.jpg');
+    await pick(wrapper, 'b.jpg');
+    d2.resolve(fakePhoto());
+    await flushPromises();
+    d1.reject(new Error('decode-failed'));
+    await flushPromises();
+    expect(q('#story-photo-error')).toBeNull();
+    expect(q('#story-nophoto').disabled).toBe(false);
+    wrapper.unmount();
+  });
+
+  test('No photo during a load, or a move to another run, drops the load', async function () {
+    const d1 = deferred(), d2 = deferred();
+    const { wrapper, router } = await mountStory('/story/r1', twoRuns);
+    const A = fakePhoto(), B = fakePhoto(), C = fakePhoto();
+    /* a photo first, so No photo is enabled */
+    photoMod.loadPhoto.mockImplementationOnce(() => Promise.resolve(C));
+    await pick(wrapper, 'c.jpg');
+    await flushPromises();
+    expect(q('#story-nophoto').disabled).toBe(false);
+    photoMod.loadPhoto.mockImplementationOnce(() => d1.promise).mockImplementationOnce(() => d2.promise);
+    await pick(wrapper, 'a.jpg');
+    await wrapper.find('#story-nophoto').trigger('click');
+    d1.resolve(A);
+    await flushPromises();
+    expect(photoMod.releasePhoto).toHaveBeenCalledWith(C);
+    expect(photoMod.releasePhoto).toHaveBeenCalledWith(A);
+    expect(q('#story-nophoto').disabled).toBe(true);
+    expect(q('#story-create').disabled).toBe(false);
+    await pick(wrapper, 'b.jpg');
+    await router.push('/story/r5');
+    await flushPromises();
+    d2.resolve(B);
+    await flushPromises();
+    expect(photoMod.releasePhoto).toHaveBeenCalledWith(B);
+    expect(q('#story-nophoto').disabled).toBe(true);
+    expect(q('#story-create').disabled).toBe(false);
+    expect(q('#story-canvas').getAttribute('aria-label')).not.toMatch(/photo/);
+    wrapper.unmount();
+  });
+
+  test('a change while the file is made drops the file', async function () {
+    const dp = deferred();
+    exp.exportPng.mockImplementationOnce(() => dp.promise);
+    const { wrapper, data } = await mountStory('/story/sample_32?from=log');
+    await wrapper.find('#story-create').trigger('click');
+    expect(q('#story-create').disabled).toBe(true);
+    data.setStoryPrefs({ opacity: 50 });
+    await flushPromises();
+    dp.resolve(new Blob(['png'], { type: 'image/png' }));
+    await flushPromises();
+    expect(q('#story-download')).toBeNull();
+    expect(q('#story-create').disabled).toBe(false);
+    expect(text('#story-status')).toBe('');
+    wrapper.unmount();
+  });
+
+  test('an export left behind by another run stops at its next frame; no second export meanwhile', async function () {
+    const dv = deferred();
+    let frame = null;
+    exp.exportVideo.mockImplementationOnce(function (canvas, drawFrame) { frame = drawFrame; return dv.promise; });
+    const { wrapper, router } = await mountStory('/story/r1', twoRuns);
+    await wrapper.find('#story-tpl-D').trigger('click');
+    await wrapper.find('#story-create').trigger('click');
+    expect(() => frame(0)).not.toThrow();
+    await router.push('/story/r5');
+    await flushPromises();
+    expect(() => frame(0.1)).toThrow();
+    expect(q('#story-create').disabled).toBe(true);
+    expect(text('#story-status')).toBe('');
+    dv.resolve(null);
+    await flushPromises();
+    expect(exp.exportVideo).toHaveBeenCalledTimes(1);
+    expect(exp.exportPng).not.toHaveBeenCalled();
+    expect(q('#story-create').disabled).toBe(false);
+    expect(q('#story-download')).toBeNull();
+    expect(text('#story-status')).toBe('');
+    wrapper.unmount();
+  });
+
+  test('an export still running when the page is left draws no more frames', async function () {
+    const dv = deferred();
+    let frame = null;
+    exp.exportVideo.mockImplementationOnce(function (canvas, drawFrame) { frame = drawFrame; return dv.promise; });
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    await wrapper.find('#story-tpl-D').trigger('click');
+    await wrapper.find('#story-create').trigger('click');
+    wrapper.unmount();
+    expect(() => frame(0)).toThrow();
+    dv.resolve(null);
+    await flushPromises();
+    expect(exp.exportPng).not.toHaveBeenCalled();
+  });
+});
+
+describe('story page, text alternative on Week lap', function () {
+  test('E names the main number and at most 3 small numbers, as it draws them', async function () {
+    const { wrapper } = await mountStory('/story/sample_32?from=log');
+    await wrapper.find('#story-num-best').trigger('click');
+    expect(q('#story-canvas').getAttribute('aria-label')).toMatch(/, best km \d:\d\d per km\.$/);
+    await wrapper.find('#story-tpl-E').trigger('click');
+    const label = q('#story-canvas').getAttribute('aria-label');
+    expect(label).toMatch(/^Story preview, template Week lap\. Distance \d\.\d\d km, time \d+:\d\d, pace \d:\d\d per km, average heart rate \d+ bpm\.$/);
+    expect(label).not.toMatch(/best km/);
+    expect(text('#story-num-count')).toBe('4 of 4 small numbers used.');
+    wrapper.unmount();
   });
 });
